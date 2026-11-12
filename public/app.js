@@ -65,7 +65,7 @@
       (j.missing || []).forEach((m) => { const li = document.createElement('li'); li.textContent = m; list.appendChild(li); });
     } else if (j && j.error === 'pluggy') {
       $('#problemTitle').textContent = 'Não consegui ler o Itaú';
-      $('#problemText').textContent = 'A Pluggy respondeu com o código ' + (j.status || 'desconhecido') + '. Confira o Client ID, o Client Secret e o itemId. Se tudo estiver certo, a autorização do Open Finance pode ter vencido: renove no Meu Pluggy.';
+      $('#problemText').textContent = 'A Pluggy respondeu com o código ' + (j.status || 'desconhecido') + (j.step ? ' na etapa ' + j.step : '') + '. Confira o Client ID, o Client Secret e o itemId. Se tudo estiver certo, a autorização do Open Finance pode ter vencido: renove no Meu Pluggy.';
     } else {
       $('#problemTitle').textContent = 'Algo deu errado';
       $('#problemText').textContent = 'Código ' + status + '. Tente de novo em instantes.';

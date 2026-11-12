@@ -36,13 +36,7 @@ async function loadAll(c) {
     accounts.push(...accs);
 
     for (const acc of accs) {
-      let rows;
-      try {
-        rows = await pluggy.getAllPages('/transactions', { accountId: acc.id, from, to });
-      } catch (e) {
-        // Se o filtro de data futura não for aceito, tenta só com a data inicial.
-        rows = await pluggy.getAllPages('/transactions', { accountId: acc.id, from });
-      }
+      const rows = await pluggy.listTransactions(acc.id, from, to);
       rows.forEach((t) => transactions.push(normalizeTx(t, acc)));
     }
 
@@ -78,6 +72,6 @@ module.exports = async (req, res) => {
     send(res, 200, data);
   } catch (e) {
     // Não devolve detalhes (nem do erro nem das chaves), só o código HTTP da Pluggy.
-    send(res, 502, { error: 'pluggy', status: e.status || null });
+    send(res, 502, { error: 'pluggy', status: e.status || null, step: e.step || null });
   }
 };
