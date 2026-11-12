@@ -158,3 +158,7 @@ h1,h2,h3,p{margin:0}
   .head-actions{width:100%}
   .head-actions .month{flex:1 1 auto;justify-content:space-between}
 }
+.swatches{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.swatch{width:34px;height:34px;border-radius:50%;border:2px solid transparent;box-shadow:0 0 0 1px var(--border);cursor:pointer;padding:0}
+.swatch[aria-pressed="true"]{border-color:var(--card);box-shadow:0 0 0 3px var(--text)}
+input[type=color]{width:48px;height:36px;padding:0;border:1px solid var(--border);border-radius:8px;background:none}

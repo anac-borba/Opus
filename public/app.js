@@ -1,13 +1,36 @@
 'use strict';
 (() => {
   /* ---------- Constantes e utilidades ---------- */
-  const CATS = {
-    'Gatos': '#EC4899', 'Alimentação': '#F59E0B', 'Transporte': '#0EA5E9', 'Lazer': '#8B5CF6',
-    'Faculdade': '#14B8A6', 'Assinaturas': '#64748B', 'Saúde': '#EF4444', 'Compras': '#A855F7',
-    'Contas e planos': '#0D9488', 'Outros': '#94A3B8'
-  };
+  // Categorias: cada uma tem um id fixo (não muda ao renomear), um nome e uma cor.
+  const DEFAULT_CATS = [
+    { id: 'Gatos', name: 'Gatos', color: '#EC4899' },
+    { id: 'Alimentação', name: 'Alimentação', color: '#F59E0B' },
+    { id: 'Transporte', name: 'Transporte', color: '#0EA5E9' },
+    { id: 'Lazer', name: 'Lazer', color: '#8B5CF6' },
+    { id: 'Faculdade', name: 'Faculdade', color: '#14B8A6' },
+    { id: 'Assinaturas', name: 'Assinaturas', color: '#64748B' },
+    { id: 'Saúde', name: 'Saúde', color: '#EF4444' },
+    { id: 'Compras', name: 'Compras', color: '#A855F7' },
+    { id: 'Contas e planos', name: 'Contas e planos', color: '#0D9488' },
+    { id: 'Outros', name: 'Outros', color: '#94A3B8' }
+  ];
+  const PALETTE = ['#EC4899', '#E11D48', '#EF4444', '#F97316', '#F59E0B', '#84CC16', '#22C55E', '#14B8A6', '#06B6D4', '#0EA5E9', '#3B82F6', '#8B5CF6', '#A855F7', '#64748B', '#94A3B8', '#78716C'];
   const NOCAT = 'Sem categoria';
-  const catColor = (c) => CATS[c] || '#D97706';
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  let CATMAP = {};
+  const catsList = () => (Array.isArray(STORE.cats) ? STORE.cats : DEFAULT_CATS);
+  const sanitizeCats = (l) => (Array.isArray(l)
+    ? l.filter((c) => c && typeof c.id === 'string' && typeof c.name === 'string' && HEX.test(c.color)).map((c) => ({ id: c.id, name: c.name.slice(0, 24), color: c.color }))
+    : null);
+  function rebuildCats() {
+    if (STORE.cats !== null && STORE.cats !== undefined) STORE.cats = sanitizeCats(STORE.cats);
+    const m = {};
+    catsList().forEach((c) => { m[c.id] = c; });
+    CATMAP = m;
+  }
+  const catName = (id) => (CATMAP[id] ? CATMAP[id].name : NOCAT);
+  const catLabel = (id) => (id === NOCAT ? NOCAT : catName(id));
+  const catColor = (id) => (CATMAP[id] && HEX.test(CATMAP[id].color) ? CATMAP[id].color : '#D97706');
   const catOf = (t) => t.category || NOCAT;
 
   const $ = (s, r) => (r || document).querySelector(s);
@@ -45,7 +68,7 @@
   const SUN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>';
 
   /* ---------- Estado ---------- */
-  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2 });
+  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null });
   const state = { tab: 'inicio', month: CUR, filter: 'all', q: '', showAll: false, sim: { valor: '2000', juros: '0', desc: '0', pay: 'card12' } };
   let DATA = null, STORE = defaultStore(), TX = [], FIX = null, storeMode = 'local', saveTimer = null;
 
@@ -128,6 +151,7 @@
     render();
   }
   function buildTx() {
+    rebuildCats();
     const rules = STORE.rules || {};
     const list = DATA.transactions.map((t) => Object.assign({}, t));
     (STORE.manual || []).forEach((m) => list.push({
@@ -135,6 +159,8 @@
       category: m.category || null, kind: 'expense', key: 'manual:' + m.id, status: 'POSTED', inst: null, manual: true
     }));
     list.forEach((t) => { if (t.kind !== 'internal' && !t.manual && rules[t.key]) t.category = rules[t.key]; });
+    // Categoria apagada (ou desconhecida) vira "Sem categoria".
+    list.forEach((t) => { if (t.kind !== 'internal' && t.category && !CATMAP[t.category]) t.category = null; });
     list.sort((a, b) => b.date.localeCompare(a.date));
     TX = list;
     FIX = null;
@@ -250,7 +276,7 @@
   function txRow(t) {
     const income = t.kind === 'income';
     const col = income ? '#16A34A' : catColor(catOf(t));
-    const cat = income ? 'Entrada' : (t.category ? esc(t.category) : '<span class="amber">Sem categoria</span>');
+    const cat = income ? 'Entrada' : (t.category ? esc(catName(t.category)) : '<span class="amber">Sem categoria</span>');
     const inst = t.inst ? ' · ' + t.inst.n + '/' + t.inst.total : '';
     const inner =
       '<span class="tx-ico" style="background:' + col + '26"><i style="background:' + col + '"></i></span>' +
@@ -273,12 +299,12 @@
     const cats = byCat(list);
 
     const bar = cats.length
-      ? '<div class="stack-bar" role="img" aria-label="' + esc('Gastos por categoria: ' + cats.map(([c, v]) => c + ' ' + Math.round((v / total) * 100) + '%').join(', ')) + '">' +
+      ? '<div class="stack-bar" role="img" aria-label="' + esc('Gastos por categoria: ' + cats.map(([c, v]) => catLabel(c) + ' ' + Math.round((v / total) * 100) + '%').join(', ')) + '">' +
         cats.map(([c, v]) => '<div style="flex:' + v + ' 1 0;background:' + catColor(c) + '"></div>').join('') + '</div>'
       : '<p class="muted">Nenhum gasto neste mês ainda.</p>';
     const legend = cats.length
       ? '<div class="legend">' + cats.map(([c, v]) =>
-          '<div class="it"><span class="dot" style="background:' + catColor(c) + '"></span><div><div class="lg-name">' + esc(c) + ' · ' + Math.round((v / total) * 100) + '%</div><div class="lg-val">' + BRL(v) + '</div></div></div>').join('') + '</div>'
+          '<div class="it"><span class="dot" style="background:' + catColor(c) + '"></span><div><div class="lg-name">' + esc(catLabel(c)) + ' · ' + Math.round((v / total) * 100) + '%</div><div class="lg-val">' + BRL(v) + '</div></div></div>').join('') + '</div>'
       : '';
 
     const hero =
@@ -324,10 +350,10 @@
       sub[k] += t.amount;
     });
     const n = STORE.catCount || 2;
-    const gatosHtml =
+    const gatosHtml = !CATMAP['Gatos'] ? '' :
       '<section class="card"><div style="display:flex;align-items:center;gap:12px"><div class="tx-ico" style="width:44px;height:44px;border-radius:14px;background:rgba(236,72,153,.15)">' +
       '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--pink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="10.5" r="1.8"/><circle cx="10" cy="6.5" r="1.8"/><circle cx="14" cy="6.5" r="1.8"/><circle cx="18" cy="10.5" r="1.8"/><path d="M8.5 16.5c0-2 1.7-3.5 3.5-3.5s3.5 1.5 3.5 3.5c0 1.4-1.1 2.5-2.5 2.5h-2c-1.4 0-2.5-1.1-2.5-2.5z"/></svg></div>' +
-      '<div><h2>Gatos</h2><p class="sub">Média de ' + BRL(gTotal / n) + ' por gato</p></div></div>' +
+      '<div><h2>' + esc(catName('Gatos')) + '</h2><p class="sub">Média de ' + BRL(gTotal / n) + ' por gato</p></div></div>' +
       '<div class="mid">' + money(gTotal) + '</div>' +
       (gTotal > 0 ? '<div class="list">' + Object.entries(sub).filter(([, v]) => v > 0).map(([k, v]) => barRow(k, BRL(v), (v / gTotal) * 100, '#EC4899')).join('') + '</div>' : '<p class="muted">Nenhum gasto com os gatos neste mês.</p>') +
       '</section>';
@@ -374,7 +400,7 @@
       ? names.map((c) => {
           const v = cur[c] || 0, a = avg[c] || 0;
           const over = a > 0 && v > a;
-          return barRow(c, BRL(v) + (a > 0 ? ' <span class="muted">de ' + BRL(a) + '</span>' : ''), a > 0 ? (v / a) * 100 : (v > 0 ? 100 : 0), catColor(c), a > 0 ? (over ? '<span class="amber">' + Math.round((v / a) * 100) + '% da sua média · acima</span>' : Math.round((v / a) * 100) + '% da sua média') : 'Sem histórico para comparar');
+          return barRow(catLabel(c), BRL(v) + (a > 0 ? ' <span class="muted">de ' + BRL(a) + '</span>' : ''), a > 0 ? (v / a) * 100 : (v > 0 ? 100 : 0), catColor(c), a > 0 ? (over ? '<span class="amber">' + Math.round((v / a) * 100) + '% da sua média · acima</span>' : Math.round((v / a) * 100) + '% da sua média') : 'Sem histórico para comparar');
         }).join('')
       : '<p class="muted">Sem dados ainda.</p>';
 
@@ -527,8 +553,17 @@
       '<section class="card"><div><h2>Minhas metas</h2><p class="sub">Quanto falta para cada uma</p></div><div class="list" style="gap:18px">' + goalRows + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn soft" data-act="goal">+ Nova meta</button><button type="button" class="btn soft" data-act="goto-sim">Simular uma compra</button></div></section>';
 
+    const cl = catsList();
+    const catRows = cl.length
+      ? cl.map((c) => '<div class="item"><div style="display:flex;align-items:center;gap:10px;min-width:0"><span class="dot" style="margin:0;background:' + catColor(c.id) + '"></span><span class="nm">' + esc(c.name) + '</span></div><button type="button" class="btn small" data-act="cat-edit" data-id="' + esc(c.id) + '" aria-label="Editar ' + esc(c.name) + '">Editar</button></div>').join('')
+      : '<p class="muted">Nenhuma categoria. Crie a primeira abaixo.</p>';
+    const catCard =
+      '<section class="card" style="gap:4px"><div><h2>Categorias</h2><p class="sub">Escolha o nome e a cor de cada uma</p></div><div style="margin-top:8px">' + catRows + '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><button type="button" class="btn soft" data-act="cat-edit">+ Nova categoria</button>' +
+      (Array.isArray(STORE.cats) ? '<button type="button" class="btn" data-act="cat-reset">Restaurar padrão</button>' : '') + '</div></section>';
+
     const meta = DATA.meta || {};
-    const when = meta.generatedAt ? new Date(meta.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const when =meta.generatedAt ? new Date(meta.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
     const accountCard =
       '<section class="card"><div><h2>Orçamento e conta</h2></div>' +
       '<div class="between"><div><div class="nm" style="font-weight:600">Orçamento mensal</div><div class="small muted">' + (STORE.budget > 0 ? 'Definido por você' : 'Automático, com base na sua média') + '</div></div><div style="display:flex;align-items:center;gap:8px"><b class="num">' + BRL(budgetValue()) + '</b><button type="button" class="btn small" data-act="budget">Alterar</button></div></div>' +
@@ -537,7 +572,7 @@
       '<br>' + (storeMode === 'server' ? 'Lançamentos, categorias e metas sincronizam entre seus aparelhos.' : 'Lançamentos, categorias e metas ficam só neste aparelho.') + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn soft" data-act="refresh" id="refreshBtn">Atualizar dados</button><button type="button" class="btn" data-act="logout">Sair</button></div></section>';
 
-    return '<div class="row-wrap top"><div class="stack" style="flex:1 1 340px">' + invCard + '</div><div class="stack" style="flex:1 1 340px">' + goalCard + accountCard + '</div></div>';
+    return '<div class="row-wrap top"><div class="stack" style="flex:1 1 340px">' + invCard + '</div><div class="stack" style="flex:1 1 340px">' + goalCard + catCard + accountCard + '</div></div>';
   }
 
   /* ---------- Banner e renderização ---------- */
@@ -567,7 +602,7 @@
   function openDlg(html) { dlg().innerHTML = html; if (!dlg().open) dlg().showModal(); }
   function closeDlg() { if (dlg().open) dlg().close(); }
   const cancelBtn = '<button type="button" class="btn" data-act="close">Cancelar</button>';
-  const catOptions = (sel) => Object.keys(CATS).map((c) => '<option' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+  const catOptions = (sel) => '<option value="">Sem categoria</option>' + catsList().map((c) => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('');
 
   function openAdd() {
     openDlg('<h2>Lançar gasto</h2><p class="muted small">Para dinheiro vivo e o que o banco não mostra.</p>' +
@@ -584,8 +619,28 @@
     if (!t) return;
     openDlg('<h2>Categoria</h2><p class="muted small">' + esc(t.desc) + ' · ' + BRL(t.amount) + '</p>' +
       (t.manual ? '' : '<p class="note" style="margin-top:8px">Vale para todas as compras parecidas, hoje e nas próximas.</p>') +
-      '<div class="cat-grid">' + Object.keys(CATS).map((c) => '<button type="button" class="btn" data-act="setcat" data-id="' + esc(id) + '" data-cat="' + esc(c) + '"><span class="dot" style="margin:0;background:' + CATS[c] + '"></span>' + esc(c) + '</button>').join('') + '</div>' +
-      '<div class="actions">' + cancelBtn + (t.manual ? '<button type="button" class="btn danger" data-act="del-manual" data-id="' + esc(id) + '">Apagar lançamento</button>' : '') + '</div>');
+      '<div class="cat-grid">' + catsList().map((c) => '<button type="button" class="btn" data-act="setcat" data-id="' + esc(id) + '" data-cat="' + esc(c.id) + '"><span class="dot" style="margin:0;background:' + catColor(c.id) + '"></span>' + esc(c.name) + '</button>').join('') + '</div>' +
+      '<div class="actions">' + cancelBtn + '<button type="button" class="btn" data-act="manage-cats">Editar categorias</button>' + (t.manual ? '<button type="button" class="btn danger" data-act="del-manual" data-id="' + esc(id) + '">Apagar lançamento</button>' : '') + '</div>');
+  }
+  function swatchesHtml(sel) {
+    const all = PALETTE.includes(sel) ? PALETTE : PALETTE.concat([sel]);
+    return all.map((c) => '<button type="button" class="swatch" data-act="pickcolor" data-color="' + c + '" style="background:' + c + '" aria-label="Cor ' + c + '" aria-pressed="' + (c.toLowerCase() === sel.toLowerCase()) + '"></button>').join('');
+  }
+  function openCatEdit(id) {
+    const c = catsList().find((x) => x.id === id) || { id: '', name: '', color: PALETTE[Math.floor(Math.random() * PALETTE.length)] };
+    openDlg('<h2>' + (id ? 'Editar categoria' : 'Nova categoria') + '</h2><form id="fCat" data-id="' + esc(c.id) + '">' +
+      '<label class="lbl" for="c-name">Nome</label><input id="c-name" class="input" required maxlength="24" autocomplete="off" value="' + esc(c.name) + '">' +
+      '<span class="lbl">Cor</span><div class="swatches" id="swatches">' + swatchesHtml(c.color) + '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label class="lbl" for="c-color" style="margin:0">Outra cor</label><input id="c-color" type="color" value="' + c.color + '"></div>' +
+      '<input type="hidden" id="c-hex" value="' + c.color + '">' +
+      '<div class="actions">' + cancelBtn + (id ? '<button type="button" class="btn danger" data-act="del-cat" data-id="' + esc(id) + '">Apagar</button>' : '') + '<button class="btn primary" type="submit">Salvar</button></div>' +
+      (id ? '<p class="muted small" style="margin-top:10px">Ao apagar, os gastos dessa categoria ficam em "Sem categoria".</p>' : '') + '</form>');
+    setTimeout(() => $('#c-name').focus(), 50);
+  }
+  function setPickedColor(hex) {
+    $('#c-hex').value = hex;
+    $('#c-color').value = hex;
+    document.querySelectorAll('#swatches .swatch').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.color.toLowerCase() === hex.toLowerCase())));
   }
   function openGoal(id) {
     const g = (STORE.goals || []).find((x) => x.id === id) || { name: '', target: '', saved: '', monthly: 300 };
@@ -626,6 +681,15 @@
     'del-manual': (el) => { STORE.manual = STORE.manual.filter((x) => x.id !== el.dataset.id); closeDlg(); saveStore(); },
     'hide-fixed': (el) => { STORE.fixedHidden = STORE.fixedHidden || {}; STORE.fixedHidden[el.dataset.key] = true; saveStore(); },
     'restore-fixed': () => { STORE.fixedHidden = {}; saveStore(); },
+    'manage-cats': () => { closeDlg(); state.tab = 'metas'; render(); $('#scroll').scrollTop = 0; },
+    'cat-edit': (el) => openCatEdit(el.dataset.id || ''),
+    pickcolor: (el) => setPickedColor(el.dataset.color),
+    'del-cat': (el) => {
+      const l = catsList().filter((c) => c.id !== el.dataset.id);
+      STORE.cats = l;
+      closeDlg(); saveStore();
+    },
+    'cat-reset': () => { if (confirm('Voltar às categorias originais?')) { STORE.cats = null; saveStore(); } },
     goal: (el) => openGoal(el.dataset.id),
     'del-goal': (el) => { STORE.goals = STORE.goals.filter((g) => g.id !== el.dataset.id); closeDlg(); saveStore(); },
     budget: () => openValue('fBudget', 'Orçamento mensal', 'Quanto você quer gastar por mês, no máximo.', STORE.budget > 0 ? STORE.budget : budgetValue(), '<button type="button" class="btn" data-act="budget-auto">Automático</button>'),
@@ -663,6 +727,20 @@
       STORE.manual.push({ id: 'm' + Date.now().toString(36), date: $('#a-date').value || TODAY, desc: $('#a-desc').value.trim(), amount, category: $('#a-cat').value, method: $('#a-met').value });
       state.month = ($('#a-date').value || TODAY).slice(0, 7);
       closeDlg(); saveStore();
+    } else if (f.id === 'fCat') {
+      const name = $('#c-name').value.trim().slice(0, 24);
+      const color = $('#c-hex').value;
+      const id = f.dataset.id;
+      const l = catsList().map((c) => Object.assign({}, c));
+      const dup = l.some((c) => c.id !== id && c.name.toLowerCase() === name.toLowerCase());
+      if (!name || name.toLowerCase() === NOCAT.toLowerCase() || dup || !HEX.test(color)) {
+        $('#c-name').setCustomValidity(dup ? 'Já existe uma categoria com esse nome' : 'Escolha outro nome'); $('#c-name').reportValidity(); return;
+      }
+      const i = l.findIndex((c) => c.id === id);
+      if (i >= 0) { l[i].name = name; l[i].color = color; }
+      else l.push({ id: 'c' + Date.now().toString(36), name, color });
+      STORE.cats = l;
+      closeDlg(); saveStore();
     } else if (f.id === 'fGoal') {
       const id = f.dataset.id;
       const g = { id: id || 'g' + Date.now().toString(36), name: $('#g-name').value.trim(), target: parseNum($('#g-target').value), saved: parseNum($('#g-saved').value), monthly: parseNum($('#g-monthly').value) };
@@ -680,7 +758,8 @@
       closeDlg(); saveStore();
     }
   });
-  document.addEventListener('input', (e) => { if (e.target.id === 'a-val') e.target.setCustomValidity(''); });
+  document.addEventListener('input', (e) => { if (e.target.id === 'a-val' || e.target.id === 'c-name') e.target.setCustomValidity('');
+    if (e.target.id === 'c-color') setPickedColor(e.target.value); });
 
   /* ---------- Entrar ---------- */
   $('#loginForm').addEventListener('submit', async (e) => {
