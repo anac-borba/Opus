@@ -127,7 +127,15 @@
         const j = await r.json();
         if (j.mode !== 'local') {
           storeMode = 'server';
-          if (j.store) STORE = Object.assign(defaultStore(), j.store);
+          if (j.store) { STORE = Object.assign(defaultStore(), j.store); return; }
+          // Nuvem vazia: leva para lá o que já estava salvo neste aparelho (só na primeira vez).
+          try {
+            const raw0 = localStorage.getItem('mg-store');
+            if (raw0) {
+              STORE = Object.assign(defaultStore(), JSON.parse(raw0));
+              fetch('/api/store', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store: STORE }) }).catch(() => {});
+            }
+          } catch (e) { /* ignorado */ }
           return;
         }
       }
