@@ -1,0 +1,10 @@
+{
+  "name": "meus-gastos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Painel pessoal de gastos (Itaú via Open Finance / Meu Pluggy), somente leitura.",
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "dev": "node scripts/dev-server.js"
+  }
+}
