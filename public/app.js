@@ -14,7 +14,7 @@
     { id: 'Contas e planos', name: 'Contas e planos', color: '#0D9488' },
     { id: 'Outros', name: 'Outros', color: '#94A3B8' }
   ];
-  const PALETTE = ['#EC4899', '#E11D48', '#EF4444', '#F97316', '#F59E0B', '#84CC16', '#22C55E', '#14B8A6', '#06B6D4', '#0EA5E9', '#3B82F6', '#8B5CF6', '#A855F7', '#64748B', '#94A3B8', '#78716C'];
+  const PALETTE = ['#BE123C', '#E11D48', '#EF4444', '#F43F5E', '#EC4899', '#DB2777', '#EA580C', '#F97316', '#F59E0B', '#EAB308', '#CA8A04', '#A16207', '#84CC16', '#65A30D', '#22C55E', '#16A34A', '#10B981', '#0D9488', '#14B8A6', '#06B6D4', '#0EA5E9', '#0284C7', '#3B82F6', '#2563EB', '#1D4ED8', '#4F46E5', '#6366F1', '#8B5CF6', '#7C3AED', '#A855F7', '#C026D3', '#D946EF', '#64748B', '#94A3B8', '#475569', '#334155', '#78716C', '#A8A29E', '#92400E', '#7F1D1D'];
   const NOCAT = 'Sem categoria';
   const HEX = /^#[0-9a-fA-F]{6}$/;
   let CATMAP = {};
@@ -68,8 +68,8 @@
   const SUN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>';
 
   /* ---------- Estado ---------- */
-  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null });
-  const state = { tab: 'inicio', month: CUR, filter: 'all', q: '', showAll: false, sim: { valor: '2000', juros: '0', desc: '0', pay: 'card12' } };
+  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null, hidden: {}, hideKeys: {}, notes: {}, invest: { rate: 13, monthly: null } });
+  const state = { tab: 'inicio', month: CUR, dir: 'out', filter: 'all', fl: { methods: [], cats: [], days: [] }, open: {}, q: '', showAll: false, sim: { valor: '2000', juros: '0', desc: '0', pay: 'card12' } };
   let DATA = null, STORE = defaultStore(), TX = [], FIX = null, storeMode = 'local', saveTimer = null;
 
   /* ---------- Telas (entrar / problema / app) ---------- */
@@ -158,15 +158,39 @@
     }
     render();
   }
+  function saveNote(t, v) {
+    v = String(v || '').trim().slice(0, 80);
+    if (t.manual) { const m = (STORE.manual || []).find((x) => x.id === t.id); if (m) m.note = v; return; }
+    STORE.notes = STORE.notes || {};
+    if (v) STORE.notes[t.id] = v; else delete STORE.notes[t.id];
+  }
+  function moveCat(id, d) {
+    const l = catsList().map((c) => Object.assign({}, c));
+    const i = l.findIndex((c) => c.id === id), j = i + d;
+    if (i < 0 || j < 0 || j >= l.length) return;
+    const x = l[i]; l[i] = l[j]; l[j] = x;
+    STORE.cats = l; saveStore();
+  }
+  function goList(setup) {
+    setup(); state.tab = 'gastos'; state.showAll = false; render();
+    const el = $('#txcard');
+    if (el) el.scrollIntoView({ block: 'start' });
+  }
   function buildTx() {
     rebuildCats();
     const rules = STORE.rules || {};
-    const list = DATA.transactions.map((t) => Object.assign({}, t));
-    (STORE.manual || []).forEach((m) => list.push({
-      id: m.id, account: 'manual', date: m.date, desc: m.desc, amount: m.amount, dir: 'out', method: m.method || 'Dinheiro',
-      category: m.category || null, kind: 'expense', key: 'manual:' + m.id, status: 'POSTED', inst: null, manual: true
-    }));
-    list.forEach((t) => { if (t.kind !== 'internal' && !t.manual && rules[t.key]) t.category = rules[t.key]; });
+    const hidden = STORE.hidden || {}, hk = STORE.hideKeys || {}, notes = STORE.notes || {};
+    const list = DATA.transactions
+      .filter((t) => !hidden[t.id] && !(t.kind !== 'internal' && hk[(t.dir === 'in' ? 'in:' : 'out:') + t.key]))
+      .map((t) => Object.assign({}, t, { note: notes[t.id] || '' }));
+    (STORE.manual || []).forEach((m) => {
+      const inc = m.kind === 'income';
+      list.push({
+        id: m.id, account: 'manual', date: m.date, desc: m.desc, amount: m.amount, dir: inc ? 'in' : 'out', method: m.method || 'Dinheiro',
+        category: inc ? null : (m.category || null), kind: inc ? 'income' : 'expense', key: 'manual:' + m.id, status: 'POSTED', inst: null, manual: true, note: m.note || ''
+      });
+    });
+    list.forEach((t) => { if (t.kind === 'expense' && !t.manual && rules[t.key]) t.category = rules[t.key]; });
     // Categoria apagada (ou desconhecida) vira "Sem categoria".
     list.forEach((t) => { if (t.kind !== 'internal' && t.category && !CATMAP[t.category]) t.category = null; });
     list.sort((a, b) => b.date.localeCompare(a.date));
@@ -176,6 +200,7 @@
 
   /* ---------- Análises ---------- */
   const expenseIn = (ym) => TX.filter((t) => t.kind === 'expense' && t.date.slice(0, 7) === ym);
+  const incomeIn = (ym) => TX.filter((t) => t.kind === 'income' && t.date.slice(0, 7) === ym);
   function byCat(list) {
     const m = {};
     list.forEach((t) => { const c = catOf(t); m[c] = (m[c] || 0) + t.amount; });
@@ -208,6 +233,7 @@
     const val = (l) => l.reduce((s, i) => s + (i.balance != null ? i.balance : (i.amount || 0)), 0);
     return { all: val(inv), cofrinho: cof.length ? val(cof) : null };
   }
+  function holdings() { const t = investTotals(); return t.all + (t.cofrinho == null && STORE.cofrinho > 0 ? STORE.cofrinho : 0); }
   function savedTotal() {
     const t = investTotals();
     if (t.cofrinho != null) return t.cofrinho;
@@ -272,10 +298,13 @@
   }
 
   /* ---------- Blocos de interface ---------- */
-  const barRow = (label, right, pct, color, extra) =>
-    '<div><div class="between"><span style="font-size:14px;font-weight:600">' + esc(label) + '</span><span class="num" style="font-size:14px">' + right + '</span></div>' +
-    '<div class="bar" style="margin-top:6px"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%;background:' + color + '"></i></div>' +
-    (extra ? '<div class="note" style="margin-top:4px">' + extra + '</div>' : '') + '</div>';
+  const barRow = (label, right, pct, color, extra, act) => {
+    const inner =
+      '<span class="br-top"><span class="br-l">' + esc(label) + '</span><span class="num br-r">' + right + '</span></span>' +
+      '<span class="bar br-bar"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%;background:' + color + '"></i></span>' +
+      (extra ? '<span class="note br-note">' + extra + '</span>' : '');
+    return act ? '<button type="button" class="rowbtn" ' + act + '>' + inner + '</button>' : '<div class="rowbtn static">' + inner + '</div>';
+  };
 
   const item = (nm, ds, vl, extra) =>
     '<div class="item"><div style="min-width:0"><div class="nm">' + esc(nm) + '</div><div class="ds">' + ds + '</div></div>' +
@@ -286,17 +315,21 @@
     const col = income ? '#16A34A' : catColor(catOf(t));
     const cat = income ? 'Entrada' : (t.category ? esc(catName(t.category)) : '<span class="amber">Sem categoria</span>');
     const inst = t.inst ? ' · ' + t.inst.n + '/' + t.inst.total : '';
+    const note = t.note ? '<span class="tx-note">' + esc(t.note) + '</span>' : '';
     const inner =
       '<span class="tx-ico" style="background:' + col + '26"><i style="background:' + col + '"></i></span>' +
       '<span class="tx-main"><span class="tx-desc" style="display:block">' + esc(t.desc) + '</span>' +
-      '<span class="tx-meta"><span>' + cat + '</span><span aria-hidden="true">·</span><span>' + esc(t.method) + inst + '</span><span aria-hidden="true">·</span><span>' + dShort(t.date) + '</span></span></span>' +
+      '<span class="tx-meta"><span>' + cat + '</span><span aria-hidden="true">·</span><span>' + esc(t.method) + inst + '</span><span aria-hidden="true">·</span><span>' + dShort(t.date) + '</span></span>' + note + '</span>' +
       '<span class="tx-amt" style="color:' + (income ? 'var(--good)' : 'var(--text)') + '">' + (income ? '+ ' : '− ') + BRL(t.amount) + '</span>';
-    return income
-      ? '<div class="tx">' + inner + '</div>'
-      : '<button type="button" class="tx" data-act="cat" data-id="' + esc(t.id) + '" aria-label="Mudar a categoria de ' + esc(t.desc) + '">' + inner + '</button>';
+    return '<button type="button" class="tx" data-act="tx" data-id="' + esc(t.id) + '" aria-label="Abrir ' + esc(t.desc) + '">' + inner + '</button>';
   }
 
   /* ---------- Início ---------- */
+  const kpi = (label, valueHtml, sub, cls, act) => {
+    const inner = '<span class="k-l">' + label + '</span><span class="k-v ' + (cls || '') + '">' + valueHtml + '</span><span class="k-s">' + sub + '</span>';
+    return act ? '<button type="button" class="card kpi" ' + act + '>' + inner + '</button>' : '<div class="card kpi">' + inner + '</div>';
+  };
+
   function viewInicio() {
     const ym = state.month;
     const list = expenseIn(ym);
@@ -305,6 +338,12 @@
     const pct = B > 0 ? Math.round((total / B) * 100) : 0;
     const left = B - total;
     const cats = byCat(list);
+    const inc = incomeIn(ym), incT = sum(inc), saldo = incT - total;
+
+    const kpis = '<div class="kpis">' +
+      kpi('Entrou em ' + esc(mName(ym)), BRL(incT), inc.length ? inc.length + (inc.length > 1 ? ' entradas' : ' entrada') + ' · ver detalhes' : 'Nenhuma entrada ainda', 'good', 'data-act="goin"') +
+      kpi('Saldo do mês', (saldo < 0 ? '−' : '') + BRL(Math.abs(saldo)), saldo >= 0 ? 'Entrou mais do que saiu' : 'Saiu mais do que entrou', saldo >= 0 ? 'good' : 'amber') +
+      kpi('Guardado', BRL(holdings()), 'Cofrinho e investimentos · ver', '', 'data-tab="invest"') + '</div>';
 
     const bar = cats.length
       ? '<div class="stack-bar" role="img" aria-label="' + esc('Gastos por categoria: ' + cats.map(([c, v]) => catLabel(c) + ' ' + Math.round((v / total) * 100) + '%').join(', ')) + '">' +
@@ -312,7 +351,8 @@
       : '<p class="muted">Nenhum gasto neste mês ainda.</p>';
     const legend = cats.length
       ? '<div class="legend">' + cats.map(([c, v]) =>
-          '<div class="it"><span class="dot" style="background:' + catColor(c) + '"></span><div><div class="lg-name">' + esc(catLabel(c)) + ' · ' + Math.round((v / total) * 100) + '%</div><div class="lg-val">' + BRL(v) + '</div></div></div>').join('') + '</div>'
+          '<button type="button" class="it lg-btn" data-act="gocat" data-cat="' + esc(c) + '" aria-label="' + esc('Ver compras de ' + catLabel(c)) + '"><span class="dot" style="background:' + catColor(c) + '"></span><span><span class="lg-name">' + esc(catLabel(c)) + ' · ' + Math.round((v / total) * 100) + '%</span><span class="lg-val">' + BRL(v) + '</span></span></button>').join('') + '</div>' +
+        '<p class="note" style="margin-top:-4px">Toque em uma categoria para ver só as compras dela.</p>'
       : '';
 
     const hero =
@@ -348,74 +388,98 @@
         '</div><p class="note" style="margin-top:12px">Meses seguintes mostram só o que já está lançado (parcelas).</p></div></section>';
     }
 
-    // Gatos
-    const gatos = list.filter((t) => t.category === 'Gatos');
-    const gTotal = sum(gatos);
-    const sub = { 'Ração': 0, 'Veterinário': 0, 'Areia': 0, 'Outros': 0 };
-    gatos.forEach((t) => {
-      const d = strip(t.desc);
-      const k = /rac/.test(d) ? 'Ração' : /vet|clinic|consulta/.test(d) ? 'Veterinário' : /areia|sanit/.test(d) ? 'Areia' : 'Outros';
-      sub[k] += t.amount;
-    });
-    const n = STORE.catCount || 2;
-    const gatosHtml = !CATMAP['Gatos'] ? '' :
-      '<section class="card"><div style="display:flex;align-items:center;gap:12px"><div class="tx-ico" style="width:44px;height:44px;border-radius:14px;background:rgba(236,72,153,.15)">' +
-      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--pink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="10.5" r="1.8"/><circle cx="10" cy="6.5" r="1.8"/><circle cx="14" cy="6.5" r="1.8"/><circle cx="18" cy="10.5" r="1.8"/><path d="M8.5 16.5c0-2 1.7-3.5 3.5-3.5s3.5 1.5 3.5 3.5c0 1.4-1.1 2.5-2.5 2.5h-2c-1.4 0-2.5-1.1-2.5-2.5z"/></svg></div>' +
-      '<div><h2>' + esc(catName('Gatos')) + '</h2><p class="sub">Média de ' + BRL(gTotal / n) + ' por gato</p></div></div>' +
-      '<div class="mid">' + money(gTotal) + '</div>' +
-      (gTotal > 0 ? '<div class="list">' + Object.entries(sub).filter(([, v]) => v > 0).map(([k, v]) => barRow(k, BRL(v), (v / gTotal) * 100, '#EC4899')).join('') + '</div>' : '<p class="muted">Nenhum gasto com os gatos neste mês.</p>') +
-      '</section>';
-
     // Como paguei
-    const grp = { 'Cartão': 0, 'Pix': 0, 'Dinheiro': 0, 'Outros': 0 };
-    list.forEach((t) => { const k = t.method === 'Cartão' || t.method === 'Pix' || t.method === 'Dinheiro' ? t.method : 'Outros'; grp[k] += t.amount; });
-    const gcol = { 'Cartão': 'var(--accent)', 'Pix': '#0D9488', 'Dinheiro': '#D97706', 'Outros': '#94A3B8' };
+    const grp = { 'Cartão': 0, 'Pix': 0, 'Boleto': 0, 'Dinheiro': 0, 'Outros': 0 };
+    list.forEach((t) => { const k = t.method in grp ? t.method : 'Outros'; grp[k] += t.amount; });
+    const gcol = { 'Cartão': 'var(--accent)', 'Pix': '#0D9488', 'Boleto': '#8B5CF6', 'Dinheiro': '#D97706', 'Outros': '#94A3B8' };
+    const gflt = { 'Cartão': 'Cartão', 'Pix': 'Pix', 'Boleto': 'Boleto', 'Dinheiro': 'Dinheiro', 'Outros': 'Outros' };
     const payHtml =
       '<section class="card"><div><h2>Como eu paguei</h2><p class="sub">Total do mês por forma de pagamento</p></div><div class="list" style="gap:18px">' +
-      Object.entries(grp).filter(([, v]) => v > 0 || total === 0).map(([k, v]) => barRow(k, BRL(v), total ? (v / total) * 100 : 0, gcol[k], total ? Math.round((v / total) * 100) + '% do total' : '')).join('') +
-      '</div><p class="note hr" style="margin-top:auto">Cartão e Pix entram sozinhos pelo banco. Dinheiro vivo você lança em <b style="color:var(--text)">+ Lançar</b>.</p></section>';
+      Object.entries(grp).filter(([, v]) => v > 0 || total === 0).map(([k, v]) => barRow(k, BRL(v), total ? (v / total) * 100 : 0, gcol[k], total ? Math.round((v / total) * 100) + '% do total' : '', 'data-act="gomethod" data-id="' + gflt[k] + '"')).join('') +
+      '</div><p class="note hr" style="margin-top:auto">Cartão, Pix e boleto entram sozinhos pelo banco. Dinheiro vivo você lança em <b style="color:var(--text)">+ Lançar</b>.</p></section>';
 
-    return hero + warn + '<div class="row-wrap">' + cardHtml + gatosHtml + payHtml + '</div>';
+    return kpis + hero + warn + '<div class="row-wrap">' + cardHtml + payHtml + '</div>';
   }
 
   /* ---------- Gastos ---------- */
+  const QUICK_OUT = [['all', 'Todas'], ['Cartão', 'Cartão'], ['Pix', 'Pix'], ['Boleto', 'Boletos'], ['parc', 'Parcelas'], ['Dinheiro', 'Dinheiro'], ['Outros', 'Outros'], ['uncat', 'Sem categoria']];
+  const QUICK_IN = [['all', 'Todas'], ['Pix', 'Pix'], ['Dinheiro', 'Dinheiro'], ['Outros', 'Outros']];
+  const METHODS = ['Cartão', 'Pix', 'Boleto', 'Transferência', 'Débito', 'Dinheiro', 'Parcelado'];
+  const isParc = (t) => !!(t.inst && t.inst.total > 1);
+  const flCount = () => state.fl.methods.length + state.fl.cats.length + state.fl.days.length;
+  function matchQuick(t, f) {
+    if (f === 'all') return true;
+    if (f === 'parc') return isParc(t);
+    if (f === 'Outros') return !['Cartão', 'Pix', 'Dinheiro', 'Boleto'].includes(t.method);
+    if (f === 'uncat') return t.kind === 'expense' && !t.category;
+    return t.method === f;
+  }
   function filteredTx() {
-    const ym = state.month;
-    let l = TX.filter((t) => t.kind !== 'internal' && t.date.slice(0, 7) === ym);
-    const f = state.filter;
-    if (f === 'Cartão' || f === 'Pix' || f === 'Dinheiro') l = l.filter((t) => t.method === f);
-    else if (f === 'Outros') l = l.filter((t) => !['Cartão', 'Pix', 'Dinheiro'].includes(t.method));
-    else if (f === 'uncat') l = l.filter((t) => t.kind === 'expense' && !t.category);
-    if (state.q) { const q = strip(state.q); l = l.filter((t) => strip(t.desc).includes(q)); }
+    const want = state.dir === 'in' ? 'income' : 'expense';
+    let l = TX.filter((t) => t.kind === want && t.date.slice(0, 7) === state.month);
+    l = l.filter((t) => matchQuick(t, state.filter));
+    const fl = state.fl;
+    if (fl.methods.length) l = l.filter((t) => fl.methods.some((m) => (m === 'Parcelado' ? isParc(t) : t.method === m)));
+    if (fl.cats.length && want === 'expense') l = l.filter((t) => fl.cats.includes(catOf(t)));
+    if (fl.days.length) l = l.filter((t) => fl.days.includes(t.date.slice(8, 10)));
+    if (state.q) { const q = strip(state.q); l = l.filter((t) => strip(t.desc).includes(q) || strip(t.note).includes(q)); }
     return l;
+  }
+  function pillsHtml() {
+    const fl = state.fl;
+    const p = [];
+    const pill = (g, v, label) => '<button type="button" class="pill-x" data-act="fl" data-g="' + g + '" data-v="' + esc(v) + '" aria-label="Remover filtro ' + esc(label) + '">' + esc(label) + ' <span aria-hidden="true">✕</span></button>';
+    fl.methods.forEach((m) => p.push(pill('methods', m, m)));
+    if (state.dir === 'out') fl.cats.forEach((c) => p.push(pill('cats', c, catLabel(c))));
+    fl.days.forEach((d) => p.push(pill('days', d, 'Dia ' + Number(d))));
+    return p.length ? '<div class="pills">' + p.join('') + '<button type="button" class="pill-x clear" data-act="fl-clear">Limpar filtros</button></div>' : '';
   }
   function txListHtml() {
     const l = filteredTx();
-    if (!l.length) return '<p class="muted" style="padding:16px 0">Nada encontrado neste mês.</p>';
+    const isIn = state.dir === 'in';
+    const head = '<div class="sum-line"><span>' + l.length + (l.length === 1 ? ' transação' : ' transações') + '</span><b class="num">' + (isIn ? '+ ' : '− ') + BRL(sum(l)) + '</b></div>';
+    if (!l.length) return head + '<p class="muted" style="padding:16px 0">Nada encontrado com esses filtros neste mês.</p>';
     const shown = state.showAll ? l : l.slice(0, 30);
-    return shown.map(txRow).join('') + (l.length > shown.length ? '<button type="button" class="btn block soft" style="margin-top:8px" data-act="more">Ver mais ' + (l.length - shown.length) + '</button>' : '');
+    return head + shown.map(txRow).join('') + (l.length > shown.length ? '<button type="button" class="btn block soft" style="margin-top:8px" data-act="more">Ver mais ' + (l.length - shown.length) + '</button>' : '');
   }
+  const FUNNEL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>';
+
   function viewGastos() {
-    const filters = [['all', 'Todas'], ['Cartão', 'Cartão'], ['Pix', 'Pix'], ['Dinheiro', 'Dinheiro'], ['Outros', 'Outros'], ['uncat', 'Sem categoria']];
-    const chips = filters.map(([id, l]) => '<button type="button" class="chip" data-act="filter" data-id="' + id + '" aria-pressed="' + (state.filter === id) + '">' + l + '</button>').join('');
+    const isIn = state.dir === 'in';
+    const quick = (isIn ? QUICK_IN : QUICK_OUT).map(([id, l]) => '<button type="button" class="chip" data-act="filter" data-id="' + id + '" aria-pressed="' + (state.filter === id) + '">' + l + '</button>').join('');
+    const n = flCount();
+    const seg = '<div class="seg" role="group" aria-label="Tipo de transação"><button type="button" data-act="dir" data-id="out" aria-pressed="' + !isIn + '">Saídas</button><button type="button" data-act="dir" data-id="in" aria-pressed="' + isIn + '">Entradas</button></div>';
 
-    const list = expenseIn(state.month);
-    const avg = avgByCat();
-    const cur = {};
-    byCat(list).forEach(([c, v]) => { cur[c] = v; });
-    const names = Array.from(new Set(Object.keys(cur).concat(Object.keys(avg)))).sort((a, b) => Math.max(cur[b] || 0, avg[b] || 0) - Math.max(cur[a] || 0, avg[a] || 0)).slice(0, 8);
-    const cmp = names.length
-      ? names.map((c) => {
-          const v = cur[c] || 0, a = avg[c] || 0;
-          const over = a > 0 && v > a;
-          return barRow(catLabel(c), BRL(v) + (a > 0 ? ' <span class="muted">de ' + BRL(a) + '</span>' : ''), a > 0 ? (v / a) * 100 : (v > 0 ? 100 : 0), catColor(c), a > 0 ? (over ? '<span class="amber">' + Math.round((v / a) * 100) + '% da sua média · acima</span>' : Math.round((v / a) * 100) + '% da sua média') : 'Sem histórico para comparar');
-        }).join('')
-      : '<p class="muted">Sem dados ainda.</p>';
+    let side;
+    if (isIn) {
+      const inc = incomeIn(state.month), incT = sum(inc), outT = sum(expenseIn(state.month));
+      const big = inc.slice().sort((a, b) => b.amount - a.amount)[0];
+      side = '<section class="card"><div><h2>Resumo de ' + esc(mName(state.month)) + '</h2><p class="sub">O que entrou e o que saiu</p></div><div>' +
+        item('Entrou', inc.length + (inc.length === 1 ? ' entrada' : ' entradas'), '<span class="good">+ ' + BRL(incT) + '</span>') +
+        item('Saiu', 'Total de gastos', '− ' + BRL(outT)) +
+        item('Saldo do mês', big ? 'Maior entrada: ' + esc(big.desc) : '', '<b class="' + (incT - outT >= 0 ? 'good' : 'amber') + '">' + (incT - outT < 0 ? '− ' : '') + BRL(Math.abs(incT - outT)) + '</b>') + '</div>' +
+        '<p class="note">Toque em uma entrada para anotar de onde veio (por exemplo, “meu pai me emprestou”) ou para remover o que não é seu, como Pix de clientes da sua mãe.</p>' +
+        '<button type="button" class="btn soft" data-act="add-in">+ Lançar entrada</button></section>';
+    } else {
+      const list = expenseIn(state.month);
+      const avg = avgByCat();
+      const cur = {};
+      byCat(list).forEach(([c, v]) => { cur[c] = v; });
+      const names = Array.from(new Set(Object.keys(cur).concat(Object.keys(avg)))).sort((a, b) => Math.max(cur[b] || 0, avg[b] || 0) - Math.max(cur[a] || 0, avg[a] || 0)).slice(0, 8);
+      const cmp = names.length
+        ? names.map((c) => {
+            const v = cur[c] || 0, a = avg[c] || 0;
+            const over = a > 0 && v > a;
+            return barRow(catLabel(c), BRL(v) + (a > 0 ? ' <span class="muted">de ' + BRL(a) + '</span>' : ''), a > 0 ? (v / a) * 100 : (v > 0 ? 100 : 0), catColor(c), a > 0 ? (over ? '<span class="amber">' + Math.round((v / a) * 100) + '% da sua média · acima</span>' : Math.round((v / a) * 100) + '% da sua média') : 'Sem histórico para comparar', 'data-act="gocat" data-cat="' + esc(c) + '"');
+          }).join('')
+        : '<p class="muted">Sem dados ainda.</p>';
+      side = '<section class="card"><div><h2>Comparado com sua média</h2><p class="sub">Média dos últimos 3 meses · toque para filtrar</p></div><div class="list" style="gap:12px">' + cmp + '</div></section>';
+    }
 
-    return '<div class="row-wrap top"><section class="card wide"><div class="split" style="align-items:center"><div><h2>Transações</h2><p class="sub">' + (DATA.meta.demo ? 'Dados de exemplo' : 'Sincronizadas do Itaú') + '</p></div></div>' +
-      '<div><label class="sr-only" for="q">Buscar transação</label><input id="q" class="input" type="search" placeholder="Buscar por nome" value="' + esc(state.q) + '" autocomplete="off"></div>' +
-      '<div class="chips">' + chips + '</div><div id="txlist">' + txListHtml() + '</div></section>' +
-      '<section class="card"><div><h2>Comparado com sua média</h2><p class="sub">Média dos últimos 3 meses</p></div><div class="list" style="gap:18px">' + cmp + '</div></section></div>';
+    return '<div class="row-wrap top"><section class="card wide" id="txcard"><div class="split" style="align-items:center"><div><h2>' + (isIn ? 'Entradas' : 'Transações') + '</h2><p class="sub">' + (DATA.meta.demo ? 'Dados de exemplo' : 'Sincronizadas do Itaú') + '</p></div>' + seg + '</div>' +
+      '<div class="search-row"><div style="flex:1 1 auto"><label class="sr-only" for="q">Buscar transação</label><input id="q" class="input" type="search" placeholder="Buscar transação" value="' + esc(state.q) + '" autocomplete="off"></div>' +
+      '<button type="button" class="icon-btn filt" data-act="filter-open" aria-label="Filtros avançados' + (n ? ', ' + n + ' ativos' : '') + '">' + FUNNEL + (n ? '<span class="badge">' + n + '</span>' : '') + '</button></div>' +
+      '<div class="chips">' + quick + '</div>' + pillsHtml() + '<div id="txlist">' + txListHtml() + '</div></section>' + side + '</div>';
   }
 
   /* ---------- Simular ---------- */
@@ -531,29 +595,147 @@
     return head + '<div class="row-wrap top"><div class="stack" style="flex:2 1 420px">' + ['inst', 'sub', 'bill', 'other'].map(section).join('') + '</div><div class="stack" style="flex:1 1 300px">' + side + '</div></div>';
   }
 
-  /* ---------- Metas ---------- */
-  function viewMetas() {
+  /* ---------- Investimentos ---------- */
+  const invCfg = () => Object.assign({ rate: 13, monthly: null }, STORE.invest || {});
+  const mRate = (aa) => Math.pow(1 + aa / 100, 1 / 12) - 1;
+  const pct2 = (n) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
+  function fv(b, p, aa, n) {
+    const i = mRate(aa);
+    if (!(i > 0)) return b + p * n;
+    const g = Math.pow(1 + i, n);
+    return b * g + p * ((g - 1) / i);
+  }
+  function monthsTo(target, b, p, aa) {
+    if (b >= target) return 0;
+    for (let n = 1; n <= 600; n++) if (fv(b, p, aa, n) >= target) return n;
+    return null;
+  }
+  function monthsLabel(n) {
+    if (n == null) return 'mais de 50 anos';
+    if (n === 0) return 'já atingida';
+    if (n < 12) return n + (n > 1 ? ' meses' : ' mês');
+    const y = Math.floor(n / 12), m = n % 12;
+    return y + (y > 1 ? ' anos' : ' ano') + (m ? ' e ' + m + (m > 1 ? ' meses' : ' mês') : '');
+  }
+  function surplusAvg() {
+    const rows = [];
+    for (let i = 1; i <= 3; i++) {
+      const ym = addM(CUR, -i);
+      const e = expenseIn(ym);
+      if (e.length) rows.push(sum(incomeIn(ym)) - sum(e));
+    }
+    return rows.length ? rows.reduce((s, v) => s + v, 0) / rows.length : null;
+  }
+  function plannedMonthly() {
+    const c = invCfg();
+    if (c.monthly != null && c.monthly >= 0) return { v: c.monthly, auto: false };
+    const s = surplusAvg();
+    return { v: s != null && s > 0 ? Math.floor(s / 10) * 10 : 0, auto: true };
+  }
+  function lineChart(a, b) {
+    const W = 560, H = 190, pl = 6, pr = 6, pt = 10, pb = 24, n = a.length;
+    const mx = Math.max.apply(null, a.concat(b).concat([1])) * 1.06;
+    const x = (i) => pl + ((W - pl - pr) * i) / (n - 1);
+    const y = (v) => pt + (H - pt - pb) * (1 - v / mx);
+    const pts = (arr) => arr.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    const area = pts(a) + ' ' + x(n - 1).toFixed(1) + ',' + (H - pb) + ' ' + x(0).toFixed(1) + ',' + (H - pb);
+    const ticks = [0, 6, 12, 18, 24].filter((i) => i < n).map((i) => '<text x="' + x(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="' + (i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle') + '">' + (i === 0 ? 'hoje' : i + ' m') + '</text>').join('');
+    return '<svg class="lc" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc('Projeção do saldo em ' + (n - 1) + ' meses: com aportes chega a ' + BRL(a[n - 1]) + ', só com rendimento a ' + BRL(b[n - 1])) + '">' +
+      '<line class="gl" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + (H - pb) + '" y2="' + (H - pb) + '"/><polygon class="ar" points="' + area + '"/><polyline class="ln-b" points="' + pts(b) + '"/><polyline class="ln-a" points="' + pts(a) + '"/>' + ticks + '</svg>';
+  }
+
+  function viewInvest() {
+    const c = invCfg();
+    const B0 = holdings();
+    const P = plannedMonthly();
+    const rate = c.rate;
+    const at = (n) => ({ n, com: fv(B0, P.v, rate, n), sem: fv(B0, 0, rate, n) });
+    const hz = [6, 12, 24, 36].map(at);
+    const yieldM = B0 * mRate(rate);
+    const N = 24, sa = [], sb = [];
+    for (let k = 0; k <= N; k++) { sa.push(fv(B0, P.v, rate, k)); sb.push(fv(B0, 0, rate, k)); }
+    const h12 = hz[1];
+
     const inv = (DATA.investments || []).slice().sort((a, b) => (b.balance || 0) - (a.balance || 0));
-    const totals = investTotals();
-    const hasCof = totals.cofrinho != null;
     const invRows = inv.length
       ? inv.map((i) => item(i.name, esc(i.subtype || i.type || 'Investimento') + (i.rate ? ' · ' + i.rate + '%' : ''), BRL(i.balance != null ? i.balance : i.amount))).join('')
       : '<p class="muted">O banco não enviou investimentos.</p>';
-    const manual = !hasCof
-      ? '<div class="hr"><p class="small muted" style="margin-bottom:8px">O Itaú pode não enviar o Cofrinho. ' + (STORE.cofrinho > 0 ? 'Saldo informado por você: <b style="color:var(--text)">' + BRL(STORE.cofrinho) + '</b>.' : 'Se ele não aparece acima, informe o saldo à mão.') + '</p><button type="button" class="btn small" data-act="cofrinho">' + (STORE.cofrinho > 0 ? 'Atualizar saldo do Cofrinho' : 'Informar saldo do Cofrinho') + '</button></div>'
+    const totals = investTotals();
+    const manualNote = totals.cofrinho == null
+      ? '<p class="note hr">O Itaú pode não enviar o Cofrinho. ' + (STORE.cofrinho > 0 ? 'Saldo informado por você: <b style="color:var(--text)">' + BRL(STORE.cofrinho) + '</b>. ' : 'Se ele não aparece, informe o saldo à mão. ') + '<button type="button" class="linkbtn" data-act="cofrinho">' + (STORE.cofrinho > 0 ? 'Atualizar saldo' : 'Informar saldo do Cofrinho') + '</button></p>'
       : '';
-    const invCard =
-      '<section class="card" style="gap:4px"><div><h2>Investimentos</h2><p class="sub">Saldo que o Itaú compartilha</p></div><div class="mid" style="margin:12px 0 4px">' + money(totals.all + (!hasCof && STORE.cofrinho > 0 ? STORE.cofrinho : 0)) + '</div>' + invRows + manual + '</section>';
 
+    const hero =
+      '<section class="card hero"><div class="split"><div><h2 class="eyebrow">Guardado hoje</h2><div class="big" style="margin-top:6px">' + money(B0) + '</div>' +
+      '<p class="small muted" style="margin-top:8px">' + (B0 > 0 ? 'Rende cerca de <b style="color:var(--text)">' + BRL(yieldM) + '</b> por mês, a ' + pct2(rate) + ' ao ano (estimativa)' : 'Informe o saldo do seu Cofrinho para ver as previsões') + '</p></div>' +
+      '<div class="params"><button type="button" class="param" data-act="rate"><span class="k">Rendimento estimado</span><span class="v">' + pct2(rate) + ' a.a.</span></button>' +
+      '<button type="button" class="param" data-act="aporte"><span class="k">Aporte mensal' + (P.auto ? ' (automático)' : '') + '</span><span class="v">' + BRL(P.v) + '</span></button></div></div></section>';
+
+    const sens = (d) => fv(B0, P.v, Math.max(0.1, rate + d), 12);
+    const proj =
+      '<section class="card"><div><h2>Previsão do seu saldo</h2><p class="sub">' + (P.v > 0 ? 'Guardando ' + BRL(P.v) + ' por mês' : 'Sem novos aportes, só rendimento') + ' · rendimento bruto de ' + pct2(rate) + ' ao ano</p></div>' +
+      '<div class="stats">' + hz.map((h) => '<div><div class="k">Em ' + h.n + ' meses</div><div class="v">' + BRL(h.com) + '</div>' + (P.v > 0 ? '<div class="note">só rendimento: ' + BRL(h.sem) + '</div>' : '') + '</div>').join('') + '</div>' +
+      lineChart(sa, sb) +
+      '<div class="keys"><span><i style="background:var(--accent)"></i>' + (P.v > 0 ? 'Com aportes de ' + BRL(P.v) + '/mês' : 'Saldo previsto') + '</span>' + (P.v > 0 ? '<span><i style="background:var(--muted)"></i>Só com rendimento</span>' : '') + '</div>' +
+      (B0 > 0 || P.v > 0
+        ? '<div class="callout">Em 12 meses você teria cerca de <b>' + BRL(h12.com) + '</b>, sendo ' + BRL(P.v * 12) + ' guardados por você e ' + BRL(Math.max(0, h12.com - B0 - P.v * 12)) + ' de rendimento. Se a taxa for 2 pontos menor (' + pct2(Math.max(0.1, rate - 2)) + '), seriam ' + BRL(sens(-2)) + '; com 2 pontos a mais (' + pct2(rate + 2) + '), ' + BRL(sens(2)) + '.</div>'
+        : '<div class="callout">Defina um aporte mensal ou informe o saldo do Cofrinho para ver a previsão.</div>') +
+      '</section>';
+
+    // Reserva de emergência
+    const base = avgTotal() || sum(expenseIn(CUR));
+    const target = base * 6;
+    const cover = base > 0 ? B0 / base : null;
+    const rp = target > 0 ? Math.min(100, (B0 / target) * 100) : 0;
+    const toGo = monthsTo(target, B0, P.v, rate);
+    const reserve =
+      '<section class="card"><div><h2>Reserva de emergência</h2><p class="sub">Meta comum: 6 meses do seu gasto médio</p></div>' +
+      (base > 0
+        ? '<div><div class="between"><span style="font-size:14px;font-weight:600">' + BRL(B0) + ' de ' + BRL(target) + '</span><b class="num">' + Math.round(rp) + '%</b></div><div class="bar lg" style="margin-top:8px"><i style="width:' + rp + '%;background:' + (rp >= 100 ? 'var(--good)' : 'var(--accent)') + '"></i></div>' +
+          '<p class="note" style="margin-top:8px">Hoje cobre ' + (cover >= 10 ? Math.round(cover) : cover.toFixed(1).replace('.', ',')) + ' meses de gastos (média de ' + BRL(base) + '/mês). ' + (rp >= 100 ? 'Meta atingida.' : 'Com o aporte e o rendimento atuais, você chega lá em ' + monthsLabel(toGo) + '.') + '</p></div>'
+        : '<p class="muted">Preciso de alguns meses de gastos para calcular.</p>') + '</section>';
+
+    // Indicações
+    const tips = [];
+    const tip = (tone, title, text) => tips.push('<div class="tip ' + tone + '"><div class="tip-t">' + esc(title) + '</div><div class="tip-x">' + esc(text) + '</div></div>');
+    if (cover != null) {
+      if (cover < 3) tip('warn', 'Reserva ainda curta', 'Seu saldo cobre ' + cover.toFixed(1).replace('.', ',') + ' meses de gastos. Antes de pensar em investimentos de maior risco, vale chegar a pelo menos 3 meses (' + BRL(base * 3) + ') e depois a 6.');
+      else if (cover < 6) tip('ok', 'Reserva a caminho', 'Você já cobre ' + cover.toFixed(1).replace('.', ',') + ' meses. Faltam ' + BRL(Math.max(0, target - B0)) + ' para a meta de 6 meses.');
+      else tip('good', 'Reserva completa', 'Seu saldo cobre ' + Math.floor(cover) + ' meses de gastos. O que passar disso pode ir para objetivos de prazo mais longo; compare opções como CDB, Tesouro Selic e LCI/LCA, olhando liquidez e imposto.');
+    }
+    const sMonth = sum(incomeIn(CUR)) - sum(expenseIn(CUR));
+    const sAvg = surplusAvg();
+    if (sAvg != null && sAvg > 0) {
+      tip('ok', 'Sobra média de ' + BRL(sAvg) + ' por mês', 'É a média de entradas menos gastos nos últimos 3 meses. Guardando tudo isso por 12 meses, com o rendimento estimado, seriam cerca de ' + BRL(fv(0, sAvg, rate, 12)) + '.');
+    } else if (sAvg != null) {
+      tip('warn', 'Os gastos vêm passando as entradas', 'Nos últimos 3 meses saiu em média ' + BRL(-sAvg) + ' a mais do que entrou. Se houver Pix que não é seu (como de clientes da sua mãe), remova em Gastos → Entradas ou Saídas para a conta ficar certa.');
+    }
+    if (state.month === CUR && sum(incomeIn(CUR)) > 0 && sMonth < 0) tip('warn', 'Este mês está no vermelho', 'Até agora saiu ' + BRL(-sMonth) + ' a mais do que entrou em ' + mName(CUR) + '.');
+    const avg = avgByCat();
+    const curBy = {};
+    byCat(expenseIn(CUR)).forEach(([cc, v]) => { curBy[cc] = v; });
+    let worst = null;
+    Object.keys(curBy).forEach((cc) => { const d = curBy[cc] - (avg[cc] || 0); if ((avg[cc] || 0) > 0 && d > 100 && curBy[cc] > avg[cc] * 1.2 && (!worst || d > worst.d)) worst = { c: cc, d }; });
+    if (worst) tip('warn', catLabel(worst.c) + ' acima da sua média', 'Neste mês você já gastou ' + BRL(worst.d) + ' a mais que o normal. Voltar à média liberaria esse valor para guardar: em 12 meses, repetindo isso, seriam cerca de ' + BRL(fv(0, worst.d, rate, 12)) + '.');
+    const fx = fixed();
+    let drop = null;
+    for (let i = 1; i <= 12; i++) { if (fx.at(i) < fx.at(i - 1) - 0.005) { drop = i; break; } }
+    if (drop) { const freed = fx.at(drop - 1) - fx.at(drop); tip('ok', 'Parcelas terminando em ' + mName(addM(CUR, drop)), 'Seus gastos fixos caem ' + BRL(freed) + ' por mês. Se esse valor virar aporte, em 12 meses somariam cerca de ' + BRL(fv(0, freed, rate, 12)) + '.'); }
+    tip('info', 'Compare o rendimento', 'O Cofrinho costuma render perto de 100% do CDI. Vale comparar com CDB de liquidez diária e Tesouro Selic para o dinheiro da reserva, conferindo a taxa e o imposto antes.');
+    const advice =
+      '<section class="card"><div><h2>Indicações</h2><p class="sub">Calculadas com os seus números</p></div><div class="tips">' + tips.join('') + '</div>' +
+      '<p class="note">Estimativas simples, com o rendimento que você definiu. O rendimento real varia, e há imposto de renda sobre investimentos. Isto não é recomendação de investimento.</p></section>';
+
+    // Metas
     const goals = STORE.goals || [];
     const goalRows = goals.length
       ? goals.map((g) => {
           const p = g.target > 0 ? (g.saved / g.target) * 100 : 0;
           const missing = Math.max(0, g.target - g.saved);
-          const months = g.monthly > 0 ? Math.ceil(missing / g.monthly) : null;
+          const months = g.monthly > 0 ? monthsTo(g.target, g.saved, g.monthly, rate) : null;
           return '<div><div class="between"><span style="font-size:14px;font-weight:600">' + esc(g.name) + '</span><span class="num" style="font-size:14px">' + BRL(g.saved) + ' de ' + BRL(g.target) + '</span></div>' +
             '<div class="bar lg" style="margin-top:6px"><i style="width:' + Math.min(100, p) + '%;background:#0D9488"></i></div>' +
-            '<div class="between" style="margin-top:4px"><span class="note">' + Math.round(p) + '% · ' + (missing > 0 ? 'faltam ' + BRL(missing) + (months ? ', ou ' + months + (months > 1 ? ' meses' : ' mês') + ' guardando ' + BRL(g.monthly) : '') : 'meta atingida') + '</span>' +
+            '<div class="between" style="margin-top:4px;align-items:center"><span class="note">' + Math.round(p) + '% · ' + (missing > 0 ? 'faltam ' + BRL(missing) + (g.monthly > 0 ? ', cerca de ' + monthsLabel(months) + ' guardando ' + BRL(g.monthly) + ' (com rendimento)' : '') : 'meta atingida') + '</span>' +
             '<button type="button" class="btn small" data-act="goal" data-id="' + esc(g.id) + '">Editar</button></div></div>';
         }).join('')
       : '<p class="muted">Você ainda não criou metas.</p>';
@@ -561,26 +743,73 @@
       '<section class="card"><div><h2>Minhas metas</h2><p class="sub">Quanto falta para cada uma</p></div><div class="list" style="gap:18px">' + goalRows + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn soft" data-act="goal">+ Nova meta</button><button type="button" class="btn soft" data-act="goto-sim">Simular uma compra</button></div></section>';
 
-    const cl = catsList();
-    const catRows = cl.length
-      ? cl.map((c) => '<div class="item"><div style="display:flex;align-items:center;gap:10px;min-width:0"><span class="dot" style="margin:0;background:' + catColor(c.id) + '"></span><span class="nm">' + esc(c.name) + '</span></div><button type="button" class="btn small" data-act="cat-edit" data-id="' + esc(c.id) + '" aria-label="Editar ' + esc(c.name) + '">Editar</button></div>').join('')
-      : '<p class="muted">Nenhuma categoria. Crie a primeira abaixo.</p>';
-    const catCard =
-      '<section class="card" style="gap:4px"><div><h2>Categorias</h2><p class="sub">Escolha o nome e a cor de cada uma</p></div><div style="margin-top:8px">' + catRows + '</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><button type="button" class="btn soft" data-act="cat-edit">+ Nova categoria</button>' +
-      (Array.isArray(STORE.cats) ? '<button type="button" class="btn" data-act="cat-reset">Restaurar padrão</button>' : '') + '</div></section>';
+    const holdCard = '<section class="card" style="gap:4px"><div><h2>O que você tem investido</h2><p class="sub">Saldo que o Itaú compartilha</p></div><div style="margin-top:8px">' + invRows + '</div>' + manualNote + '</section>';
 
+    return '<div class="page-h"><h2>Investimentos</h2><p>Previsões, estimativas e indicações com base nos seus números</p></div>' + hero +
+      '<div class="row-wrap top"><div class="stack" style="flex:1.4 1 420px">' + proj + reserve + '</div><div class="stack" style="flex:1 1 320px">' + advice + goalCard + holdCard + '</div></div>';
+  }
+
+  /* ---------- Configurações ---------- */
+  const CHEV = '<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  const UP = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+  const DOWN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  function acc(id, title, sub, body) {
+    const open = !!state.open[id];
+    return '<section class="card acc"><button type="button" class="acc-h" data-act="acc" data-id="' + id + '" aria-expanded="' + open + '"><span><span class="acc-t">' + title + '</span><span class="acc-s">' + sub + '</span></span>' + CHEV + '</button>' +
+      (open ? '<div class="acc-b">' + body + '</div>' : '') + '</section>';
+  }
+  const row = (nm, ds, right) => '<div class="item"><div style="min-width:0"><div class="nm">' + nm + '</div>' + (ds ? '<div class="ds">' + ds + '</div>' : '') + '</div><div style="display:flex;align-items:center;gap:8px;flex:none">' + right + '</div></div>';
+
+  function viewConfig() {
     const meta = DATA.meta || {};
-    const when =meta.generatedAt ? new Date(meta.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-    const accountCard =
-      '<section class="card"><div><h2>Orçamento e conta</h2></div>' +
-      '<div class="between"><div><div class="nm" style="font-weight:600">Orçamento mensal</div><div class="small muted">' + (STORE.budget > 0 ? 'Definido por você' : 'Automático, com base na sua média') + '</div></div><div style="display:flex;align-items:center;gap:8px"><b class="num">' + BRL(budgetValue()) + '</b><button type="button" class="btn small" data-act="budget">Alterar</button></div></div>' +
-      '<div class="hr small muted" style="line-height:1.6">' + (meta.demo ? 'Dados de demonstração.' : 'Dados lidos em ' + esc(when) + '. O Meu Pluggy atualiza o banco a cada 24 horas.') +
+    const when = meta.generatedAt ? new Date(meta.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const dark = document.documentElement.dataset.theme === 'dark';
+
+    const look = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div><div class="nm">Aparência</div><div class="ds">Tema ' + (dark ? 'escuro' : 'claro') + ' ativo</div></div>' +
+      '<div class="seg" role="group" aria-label="Tema"><button type="button" data-act="set-theme" data-id="light" aria-pressed="' + !dark + '">Claro</button><button type="button" data-act="set-theme" data-id="dark" aria-pressed="' + dark + '">Escuro</button></div></div></section>';
+
+    const cl = catsList();
+    const usage = {};
+    TX.forEach((t) => { if (t.kind === 'expense' && t.category) usage[t.category] = (usage[t.category] || 0) + 1; });
+    const catBody = (cl.length
+      ? cl.map((c, i) => row('<span style="display:flex;align-items:center;gap:10px"><span class="dot" style="margin:0;background:' + catColor(c.id) + '"></span>' + esc(c.name) + '</span>', (usage[c.id] || 0) + (usage[c.id] === 1 ? ' compra' : ' compras'),
+          '<button type="button" class="icon-btn sm" data-act="cat-up" data-id="' + esc(c.id) + '" aria-label="Subir ' + esc(c.name) + '"' + (i === 0 ? ' disabled' : '') + '>' + UP + '</button>' +
+          '<button type="button" class="icon-btn sm" data-act="cat-down" data-id="' + esc(c.id) + '" aria-label="Descer ' + esc(c.name) + '"' + (i === cl.length - 1 ? ' disabled' : '') + '>' + DOWN + '</button>' +
+          '<button type="button" class="btn small" data-act="cat-edit" data-id="' + esc(c.id) + '" aria-label="Editar ' + esc(c.name) + '">Editar</button>')).join('')
+      : '<p class="muted">Nenhuma categoria. Crie a primeira abaixo.</p>') +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px"><button type="button" class="btn soft" data-act="cat-edit">+ Nova categoria</button>' + (Array.isArray(STORE.cats) ? '<button type="button" class="btn" data-act="cat-reset">Restaurar padrão</button>' : '') + '</div>' +
+      '<p class="note" style="margin-top:10px">A ordem aqui é a mesma que aparece ao escolher a categoria de uma compra.</p>';
+
+    const c = invCfg(), P = plannedMonthly();
+    const budBody =
+      row('Orçamento mensal', STORE.budget > 0 ? 'Definido por você' : 'Automático, com base na sua média', '<b class="num">' + BRL(budgetValue()) + '</b><button type="button" class="btn small" data-act="budget">Alterar</button>') +
+      row('Saldo do Cofrinho', investTotals().cofrinho != null ? 'Lido do Itaú' : (STORE.cofrinho > 0 ? 'Informado por você' : 'O Itaú não enviou; informe à mão'), '<b class="num">' + BRL(savedTotal()) + '</b>' + (investTotals().cofrinho != null ? '' : '<button type="button" class="btn small" data-act="cofrinho">' + (STORE.cofrinho > 0 ? 'Atualizar' : 'Informar') + '</button>')) +
+      row('Rendimento estimado', 'Usado nas previsões de Investimentos', '<b class="num">' + pct2(c.rate) + ' a.a.</b><button type="button" class="btn small" data-act="rate">Alterar</button>') +
+      row('Aporte mensal planejado', P.auto ? 'Automático: sobra média das entradas menos gastos' : 'Definido por você', '<b class="num">' + BRL(P.v) + '</b><button type="button" class="btn small" data-act="aporte">Alterar</button>');
+
+    const hid = Object.entries(STORE.hidden || {});
+    const hk = Object.entries(STORE.hideKeys || {});
+    const fxN = Object.keys(STORE.fixedHidden || {}).length;
+    const hidBody =
+      (hid.length || hk.length || fxN
+        ? hk.map(([k, v]) => row('Entradas de “' + esc((v && v.n) || k) + '”', 'Ignoradas sempre', '<button type="button" class="btn small" data-act="restore-key" data-key="' + esc(k) + '">Restaurar</button>')).join('') +
+          hid.slice(0, 60).map(([id, v]) => row(esc(v.d || 'Transação'), esc((v.dt ? dShort(v.dt) : '') + ' · ' + (v.dir === 'in' ? 'Entrada' : 'Saída')), '<span class="vl">' + BRL(v.a) + '</span><button type="button" class="btn small" data-act="restore-tx" data-id="' + esc(id) + '">Restaurar</button>')).join('') +
+          (fxN ? row('Gastos fixos ocultos', 'Marcados como “Não é fixo”', '<button type="button" class="btn small" data-act="restore-fixed">Mostrar ' + fxN + '</button>') : '')
+        : '<p class="muted">Nada removido. Para tirar uma transação das contas, toque nela em Gastos e escolha “Remover”.</p>') +
+      '<p class="note" style="margin-top:10px">Transações removidas deixam de entrar nos totais, nas médias e nas previsões. Você pode restaurá-las aqui.</p>';
+
+    const account =
+      '<section class="card"><div><h2>Conta e dados</h2></div><div class="small muted" style="line-height:1.6">' + (meta.demo ? 'Dados de demonstração.' : 'Dados lidos em ' + esc(when) + '. O Meu Pluggy atualiza o banco a cada 24 horas.') +
       (meta.consentExpiresAt ? '<br>Autorização do Open Finance até ' + esc(meta.consentExpiresAt.split('-').reverse().join('/')) + '.' : '') +
       '<br>' + (storeMode === 'server' ? 'Lançamentos, categorias e metas sincronizam entre seus aparelhos.' : 'Lançamentos, categorias e metas ficam só neste aparelho.') + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn soft" data-act="refresh" id="refreshBtn">Atualizar dados</button><button type="button" class="btn" data-act="logout">Sair</button></div></section>';
 
-    return '<div class="row-wrap top"><div class="stack" style="flex:1 1 340px">' + invCard + '</div><div class="stack" style="flex:1 1 340px">' + goalCard + catCard + accountCard + '</div></div>';
+    return '<div class="page-h"><h2>Configurações</h2><p>Tudo o que você pode ajustar no app</p></div>' +
+      '<div class="cfg">' + look +
+      acc('cats', 'Editar categorias', cl.length + (cl.length === 1 ? ' categoria' : ' categorias') + ' · nome, cor e ordem', catBody) +
+      acc('budget', 'Orçamento e conta', 'Orçamento, Cofrinho, rendimento e aporte', budBody) +
+      acc('hidden', 'Transações removidas', (hid.length + hk.length + fxN) ? (hid.length + hk.length + fxN) + ' itens para restaurar' : 'Nenhuma', hidBody) +
+      account + '</div>';
   }
 
   /* ---------- Banner e renderização ---------- */
@@ -598,9 +827,11 @@
     if (!DATA) return;
     document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === state.tab ? 'page' : 'false'));
     $('#monthLabel').textContent = mLong(state.month);
-    document.querySelector('.month').hidden = state.tab !== 'inicio' && state.tab !== 'gastos';
+    const mt = state.tab === 'inicio' || state.tab === 'gastos';
+    document.querySelector('.month').hidden = !mt;
+    $('#addBtn').hidden = !mt;
     $('#subtitle').textContent = DATA.meta.demo ? 'Dados de exemplo' : 'Itaú';
-    const views = { inicio: viewInicio, gastos: viewGastos, simular: viewSimular, fixos: viewFixos, metas: viewMetas };
+    const views = { inicio: viewInicio, gastos: viewGastos, simular: viewSimular, fixos: viewFixos, invest: viewInvest, config: viewConfig };
     $('#view').innerHTML = views[state.tab]();
     renderBanner();
   }
@@ -612,23 +843,54 @@
   const cancelBtn = '<button type="button" class="btn" data-act="close">Cancelar</button>';
   const catOptions = (sel) => '<option value="">Sem categoria</option>' + catsList().map((c) => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('');
 
-  function openAdd() {
-    openDlg('<h2>Lançar gasto</h2><p class="muted small">Para dinheiro vivo e o que o banco não mostra.</p>' +
-      '<form id="fAdd"><label class="lbl" for="a-desc">O que foi?</label><input id="a-desc" class="input" required maxlength="60" autocomplete="off">' +
+  function openAdd(type) {
+    const inc = type === 'in';
+    const seg = '<div class="seg" role="group" aria-label="Tipo" style="margin-top:12px"><button type="button" data-act="add-type" data-id="out" aria-pressed="' + !inc + '">Gasto</button><button type="button" data-act="add-type" data-id="in" aria-pressed="' + inc + '">Entrada</button></div>';
+    const methods = inc ? ['Pix', 'Dinheiro', 'Transferência'] : ['Dinheiro', 'Pix', 'Cartão', 'Boleto'];
+    openDlg('<h2>' + (inc ? 'Lançar entrada' : 'Lançar gasto') + '</h2><p class="muted small">' + (inc ? 'Dinheiro que entrou e o banco não mostra, ou algo para anotar.' : 'Para dinheiro vivo e o que o banco não mostra.') + '</p>' + seg +
+      '<form id="fAdd" data-type="' + (inc ? 'in' : 'out') + '"><label class="lbl" for="a-desc">' + (inc ? 'De quem ou de onde veio?' : 'O que foi?') + '</label><input id="a-desc" class="input" required maxlength="60" autocomplete="off">' +
       '<label class="lbl" for="a-val">Valor (R$)</label><input id="a-val" class="input" inputmode="decimal" required autocomplete="off">' +
-      '<label class="lbl" for="a-cat">Categoria</label><select id="a-cat" class="input">' + catOptions('Alimentação') + '</select>' +
-      '<label class="lbl" for="a-met">Forma de pagamento</label><select id="a-met" class="input"><option>Dinheiro</option><option>Pix</option><option>Cartão</option></select>' +
+      (inc ? '<label class="lbl" for="a-note">Descritivo (opcional)</label><input id="a-note" class="input" maxlength="80" placeholder="Ex.: meu pai me emprestou" autocomplete="off">'
+           : '<label class="lbl" for="a-cat">Categoria</label><select id="a-cat" class="input">' + catOptions('Alimentação') + '</select>') +
+      '<label class="lbl" for="a-met">Forma de pagamento</label><select id="a-met" class="input">' + methods.map((m) => '<option>' + m + '</option>').join('') + '</select>' +
       '<label class="lbl" for="a-date">Data</label><input id="a-date" type="date" class="input" value="' + TODAY + '" max="' + TODAY + '" required>' +
       '<div class="actions">' + cancelBtn + '<button class="btn primary" type="submit">Salvar</button></div></form>');
     setTimeout(() => $('#a-desc').focus(), 50);
   }
-  function openCat(id) {
+  function openTx(id) {
     const t = TX.find((x) => x.id === id);
     if (!t) return;
-    openDlg('<h2>Categoria</h2><p class="muted small">' + esc(t.desc) + ' · ' + BRL(t.amount) + '</p>' +
-      (t.manual ? '' : '<p class="note" style="margin-top:8px">Vale para todas as compras parecidas, hoje e nas próximas.</p>') +
-      '<div class="cat-grid">' + catsList().map((c) => '<button type="button" class="btn" data-act="setcat" data-id="' + esc(id) + '" data-cat="' + esc(c.id) + '"><span class="dot" style="margin:0;background:' + catColor(c.id) + '"></span>' + esc(c.name) + '</button>').join('') + '</div>' +
-      '<div class="actions">' + cancelBtn + '<button type="button" class="btn" data-act="manage-cats">Editar categorias</button>' + (t.manual ? '<button type="button" class="btn danger" data-act="del-manual" data-id="' + esc(id) + '">Apagar lançamento</button>' : '') + '</div>');
+    const income = t.kind === 'income';
+    const canAll = income && !t.manual && t.key && t.key.indexOf('id:') !== 0;
+    openDlg('<h2>' + esc(t.desc) + '</h2><p class="muted small">' + (income ? '+ ' : '− ') + BRL(t.amount) + ' · ' + esc(t.method) + ' · ' + dShort(t.date) + '</p>' +
+      '<form id="fTx" data-id="' + esc(id) + '"><label class="lbl" for="t-note">Descritivo (opcional)</label>' +
+      '<input id="t-note" class="input" maxlength="80" autocomplete="off" placeholder="' + (income ? 'Ex.: meu pai me emprestou' : 'Ex.: presente da minha mãe') + '" value="' + esc(t.note || '') + '">' +
+      (income ? '' : '<span class="lbl">Categoria</span>' + (t.manual ? '' : '<p class="note" style="margin-bottom:6px">Vale para todas as compras parecidas, hoje e nas próximas.</p>') +
+        '<div class="cat-grid" style="margin-top:6px">' + catsList().map((c) => '<button type="button" class="btn" data-act="setcat" data-id="' + esc(id) + '" data-cat="' + esc(c.id) + '" aria-pressed="' + (t.category === c.id) + '"><span class="dot" style="margin:0;background:' + catColor(c.id) + '"></span>' + esc(c.name) + '</button>').join('') + '</div>' +
+        '<div style="margin-top:8px"><button type="button" class="linkbtn" data-act="manage-cats">Editar categorias</button></div>') +
+      '<div class="actions">' + cancelBtn + '<button class="btn primary" type="submit">Salvar</button></div></form>' +
+      '<div class="hr danger-zone" style="margin-top:16px"><div class="upper" style="margin-bottom:8px">Não é meu?</div><div class="actions" style="margin-top:0">' +
+      '<button type="button" class="btn danger" data-act="tx-remove" data-id="' + esc(id) + '">' + (t.manual ? 'Apagar lançamento' : 'Remover esta transação') + '</button>' +
+      (canAll ? '<button type="button" class="btn danger" data-act="tx-remove-all" data-id="' + esc(id) + '">Remover todas de “' + esc(t.key) + '”</button>' : '') + '</div>' +
+      '<p class="note" style="margin-top:8px">Removida, ela deixa de entrar nas contas. Dá para restaurar em Configurações.</p></div>');
+  }
+  function openFilter(keepScroll) {
+    const top = keepScroll ? dlg().scrollTop : 0;
+    const fl = state.fl;
+    const sel = (g, v) => fl[g].includes(v);
+    const chip = (g, v, label, dot) => '<button type="button" class="chip sm" data-act="fl" data-g="' + g + '" data-v="' + esc(v) + '" aria-pressed="' + sel(g, v) + '">' + (dot ? '<span class="dot" style="margin:0 6px 0 0;background:' + dot + ';display:inline-block;vertical-align:middle"></span>' : '') + esc(label) + '</button>';
+    const [y, m] = state.month.split('-').map(Number);
+    const nDays = new Date(y, m, 0).getDate();
+    const has = new Set(TX.filter((t) => t.kind !== 'internal' && t.date.slice(0, 7) === state.month).map((t) => t.date.slice(8, 10)));
+    const days = Array.from({ length: nDays }, (_, i) => { const d = pad(i + 1); return '<button type="button" class="day' + (has.has(d) ? ' has' : '') + '" data-act="fl" data-g="days" data-v="' + d + '" aria-pressed="' + sel('days', d) + '" aria-label="Dia ' + (i + 1) + '">' + (i + 1) + '</button>'; }).join('');
+    const isIn = state.dir === 'in';
+    openDlg('<div class="between" style="align-items:center"><h2>Filtros</h2><button type="button" class="btn small" data-act="fl-clear">Limpar</button></div>' +
+      '<p class="muted small">Escolha um ou vários. Dentro de cada grupo vale qualquer um; entre grupos, todos.</p>' +
+      '<span class="lbl">Tipo de transação</span><div class="chips">' + METHODS.map((x) => chip('methods', x, x)).join('') + '</div>' +
+      (isIn ? '' : '<span class="lbl">Categoria</span><div class="chips">' + catsList().map((c) => chip('cats', c.id, c.name, catColor(c.id))).join('') + chip('cats', NOCAT, 'Sem categoria', '#D97706') + '</div>') +
+      '<span class="lbl">Dia de ' + esc(mName(state.month)) + '</span><div class="days">' + days + '</div><p class="note" style="margin-top:6px">O ponto marca os dias com transações.</p>' +
+      '<div class="actions"><button type="button" class="btn primary" data-act="close">Ver ' + filteredTx().length + ' resultado' + (filteredTx().length === 1 ? '' : 's') + '</button></div>');
+    dlg().scrollTop = top;
   }
   function swatchesHtml(sel) {
     const all = PALETTE.includes(sel) ? PALETTE : PALETTE.concat([sel]);
@@ -659,8 +921,8 @@
       '<label class="lbl" for="g-monthly">Quanto guarda por mês (R$)</label><input id="g-monthly" class="input" inputmode="decimal" value="' + esc(g.monthly) + '">' +
       '<div class="actions">' + cancelBtn + (id ? '<button type="button" class="btn danger" data-act="del-goal" data-id="' + esc(id) + '">Apagar</button>' : '') + '<button class="btn primary" type="submit">Salvar</button></div></form>');
   }
-  function openValue(formId, title, text, value, extra) {
-    openDlg('<h2>' + title + '</h2><p class="muted small">' + text + '</p><form id="' + formId + '"><label class="lbl" for="v-val">Valor (R$)</label><input id="v-val" class="input" inputmode="decimal" required value="' + esc(value || '') + '">' +
+  function openValue(formId, title, text, value, extra, label) {
+    openDlg('<h2>' + title + '</h2><p class="muted small">' + text + '</p><form id="' + formId + '"><label class="lbl" for="v-val">' + (label || 'Valor (R$)') + '</label><input id="v-val" class="input" inputmode="decimal" required value="' + esc(value == null ? '' : value) + '">' +
       '<div class="actions">' + cancelBtn + (extra || '') + '<button class="btn primary" type="submit">Salvar</button></div></form>');
     setTimeout(() => $('#v-val').focus(), 50);
   }
@@ -669,27 +931,73 @@
   const actions = {
     close: closeDlg,
     reload: () => location.reload(),
-    theme: () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
-    prev: () => { if (diffM(state.month, CUR) < 12) { state.month = addM(state.month, -1); state.showAll = false; render(); } },
-    next: () => { if (diffM(CUR, state.month) < 2) { state.month = addM(state.month, 1); state.showAll = false; render(); } },
-    add: openAdd,
+    theme: () => { applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); if (state.tab === 'config') render(); },
+    prev: () => { if (diffM(state.month, CUR) < 12) { state.month = addM(state.month, -1); state.showAll = false; state.fl.days = []; render(); } },
+    next: () => { if (diffM(CUR, state.month) < 2) { state.month = addM(state.month, 1); state.showAll = false; state.fl.days = []; render(); } },
+    add: () => openAdd(state.tab === 'gastos' && state.dir === 'in' ? 'in' : 'out'),
+    'add-in': () => openAdd('in'),
+    'add-type': (el) => openAdd(el.dataset.id),
     filter: (el) => { state.filter = el.dataset.id; state.showAll = false; render(); },
+    dir: (el) => { state.dir = el.dataset.id; state.filter = 'all'; state.showAll = false; render(); },
     more: () => { state.showAll = true; $('#txlist').innerHTML = txListHtml(); },
-    'goto-uncat': () => { state.tab = 'gastos'; state.filter = 'uncat'; render(); $('#scroll').scrollTop = 0; },
+    'filter-open': () => openFilter(false),
+    fl: (el) => {
+      const g = el.dataset.g, v = el.dataset.v, a = state.fl[g];
+      const i = a.indexOf(v);
+      if (i >= 0) a.splice(i, 1); else a.push(v);
+      state.showAll = false; render();
+      if (dlg().open) openFilter(true);
+    },
+    'fl-clear': () => { state.fl = { methods: [], cats: [], days: [] }; state.showAll = false; render(); if (dlg().open) openFilter(true); },
+    gocat: (el) => { goList(() => { state.dir = 'out'; state.filter = 'all'; state.q = ''; state.fl = { methods: [], cats: [el.dataset.cat], days: [] }; }); },
+    gomethod: (el) => { goList(() => { state.dir = 'out'; state.filter = el.dataset.id; state.q = ''; state.fl = { methods: [], cats: [], days: [] }; }); },
+    goin: () => { goList(() => { state.dir = 'in'; state.filter = 'all'; state.q = ''; state.fl = { methods: [], cats: [], days: [] }; }); },
+    'goto-uncat': () => { goList(() => { state.dir = 'out'; state.filter = 'uncat'; state.q = ''; state.fl = { methods: [], cats: [], days: [] }; }); },
     'goto-sim': () => { state.tab = 'simular'; render(); $('#scroll').scrollTop = 0; },
     pay: (el) => { state.sim.pay = el.dataset.id; render(); },
-    cat: (el) => openCat(el.dataset.id),
+    tx: (el) => openTx(el.dataset.id),
     setcat: (el) => {
       const t = TX.find((x) => x.id === el.dataset.id);
       if (!t) return;
+      if ($('#t-note')) saveNote(t, $('#t-note').value);
       if (t.manual) { const m = STORE.manual.find((x) => x.id === t.id); if (m) m.category = el.dataset.cat; }
       else { STORE.rules = STORE.rules || {}; STORE.rules[t.key] = el.dataset.cat; }
       closeDlg(); saveStore();
     },
-    'del-manual': (el) => { STORE.manual = STORE.manual.filter((x) => x.id !== el.dataset.id); closeDlg(); saveStore(); },
+    'tx-remove': (el) => {
+      const t = TX.find((x) => x.id === el.dataset.id);
+      if (!t) return;
+      if (!confirm(t.manual ? 'Apagar este lançamento?' : 'Remover esta transação das suas contas? Você pode restaurar em Configurações.')) return;
+      if (t.manual) STORE.manual = STORE.manual.filter((x) => x.id !== t.id);
+      else { STORE.hidden = STORE.hidden || {}; STORE.hidden[t.id] = { d: t.desc.slice(0, 60), a: t.amount, dt: t.date, dir: t.dir }; }
+      closeDlg(); saveStore();
+    },
+    'tx-remove-all': (el) => {
+      const t = TX.find((x) => x.id === el.dataset.id);
+      if (!t) return;
+      if (!confirm('Ignorar sempre as entradas de “' + t.key + '”? Você pode restaurar em Configurações.')) return;
+      STORE.hideKeys = STORE.hideKeys || {};
+      STORE.hideKeys['in:' + t.key] = { n: t.key };
+      closeDlg(); saveStore();
+    },
+    'restore-tx': (el) => { if (STORE.hidden) delete STORE.hidden[el.dataset.id]; saveStore(); },
+    'restore-key': (el) => { if (STORE.hideKeys) delete STORE.hideKeys[el.dataset.key]; saveStore(); },
+    acc: (el) => { state.open[el.dataset.id] = !state.open[el.dataset.id]; render(); },
+    'cat-up': (el) => moveCat(el.dataset.id, -1),
+    'cat-down': (el) => moveCat(el.dataset.id, 1),
+    rate: () => openValue('fRate', 'Rendimento estimado', 'Percentual bruto ao ano usado nas previsões. Confira a taxa do seu Cofrinho no app do Itaú.', String(invCfg().rate).replace('.', ','), '', 'Taxa (% ao ano)'),
+    aporte: () => openValue('fAporte', 'Aporte mensal planejado', 'Quanto você pretende guardar por mês. No modo automático, o app usa a sobra média entre entradas e gastos.', plannedMonthly().v, '<button type="button" class="btn" data-act="aporte-auto">Automático</button>', 'Valor por mês (R$)'),
+    'aporte-auto': () => { STORE.invest = Object.assign(invCfg(), { monthly: null }); closeDlg(); saveStore(); },
+    'set-theme': (el) => { applyTheme(el.dataset.id); render(); },
+    pwtoggle: (el) => {
+      const i = $('#pw'); const show = i.type === 'password';
+      i.type = show ? 'text' : 'password';
+      el.setAttribute('aria-pressed', String(show));
+      el.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+    },
     'hide-fixed': (el) => { STORE.fixedHidden = STORE.fixedHidden || {}; STORE.fixedHidden[el.dataset.key] = true; saveStore(); },
     'restore-fixed': () => { STORE.fixedHidden = {}; saveStore(); },
-    'manage-cats': () => { closeDlg(); state.tab = 'metas'; render(); $('#scroll').scrollTop = 0; },
+    'manage-cats': () => { closeDlg(); state.tab = 'config'; state.open.cats = true; render(); $('#scroll').scrollTop = 0; },
     'cat-edit': (el) => openCatEdit(el.dataset.id || ''),
     pickcolor: (el) => setPickedColor(el.dataset.color),
     'del-cat': (el) => {
@@ -731,9 +1039,24 @@
     if (f.id === 'fAdd') {
       const amount = parseNum($('#a-val').value);
       if (!(amount > 0)) { $('#a-val').setCustomValidity('Informe um valor maior que zero'); $('#a-val').reportValidity(); return; }
+      const inc = f.dataset.type === 'in';
       STORE.manual = STORE.manual || [];
-      STORE.manual.push({ id: 'm' + Date.now().toString(36), date: $('#a-date').value || TODAY, desc: $('#a-desc').value.trim(), amount, category: $('#a-cat').value, method: $('#a-met').value });
-      state.month = ($('#a-date').value || TODAY).slice(0, 7);
+      const entry = { id: 'm' + Date.now().toString(36), date: $('#a-date').value || TODAY, desc: $('#a-desc').value.trim(), amount, method: $('#a-met').value, kind: inc ? 'income' : 'expense' };
+      if (inc) entry.note = $('#a-note').value.trim().slice(0, 80); else entry.category = $('#a-cat').value;
+      STORE.manual.push(entry);
+      state.month = entry.date.slice(0, 7);
+      if (state.tab === 'gastos') { state.dir = inc ? 'in' : 'out'; state.filter = 'all'; state.fl = { methods: [], cats: [], days: [] }; }
+      closeDlg(); saveStore();
+    } else if (f.id === 'fTx') {
+      const t = TX.find((x) => x.id === f.dataset.id);
+      if (t) saveNote(t, $('#t-note').value);
+      closeDlg(); saveStore();
+    } else if (f.id === 'fRate') {
+      const v = parseNum($('#v-val').value);
+      STORE.invest = Object.assign(invCfg(), { rate: v > 0 && v <= 100 ? v : 13 });
+      closeDlg(); saveStore();
+    } else if (f.id === 'fAporte') {
+      STORE.invest = Object.assign(invCfg(), { monthly: parseNum($('#v-val').value) });
       closeDlg(); saveStore();
     } else if (f.id === 'fCat') {
       const name = $('#c-name').value.trim().slice(0, 24);
