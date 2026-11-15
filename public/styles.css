@@ -278,3 +278,9 @@ button.card.kpi:hover{border-color:var(--accent)}
 .acc-b{padding:0 20px 20px}
 .acc-b .item:first-child{border-top:1px solid var(--line)}
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
+
+.auth-form .btn.face{margin-top:0;gap:10px}
+.or{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px;margin:20px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--border)}
+.btn[hidden],.or[hidden]{display:none!important}
+.auth-form .btn.face{display:inline-flex;align-items:center;justify-content:center}

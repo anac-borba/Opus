@@ -13,7 +13,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-180.png">
-<link rel="stylesheet" href="/styles.css?v=8">
+<link rel="stylesheet" href="/styles.css?v=9">
 </head>
 <body>
 
@@ -40,6 +40,8 @@
       <h1>Entrar</h1>
       <p class="lead">Informe sua senha para acessar o painel.</p>
       <input class="sr-only" type="text" name="username" autocomplete="username" value="meus-gastos" tabindex="-1" aria-hidden="true" readonly>
+      <button type="button" class="btn primary block face" id="faceBtn" data-act="faceid-login" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 10v1.5M15 10v1.5M12 10v3.5h-.8M9 15.5c1.8 1.5 4.2 1.5 6 0"/></svg>Entrar com Face ID</button>
+      <div class="or" id="faceOr" hidden><span>ou use a senha</span></div>
       <label for="pw" class="lbl" style="margin-top:0">Senha</label>
       <div class="pw-wrap">
         <input id="pw" class="input" type="password" name="password" autocomplete="current-password" required>
@@ -104,6 +106,6 @@
 
 <dialog id="dlg" class="dlg"></dialog>
 
-<script src="/app.js?v=8" defer></script>
+<script src="/app.js?v=9" defer></script>
 </body>
 </html>

@@ -77,7 +77,9 @@
     $('#login').hidden = which !== 'login';
     $('#problem').hidden = which !== 'problem';
     $('#app').hidden = which !== 'app';
-    if (which === 'login') setTimeout(() => $('#pw').focus(), 50);
+    if (which === 'login') {
+      faceStatus().then(() => { setFaceUi(); if (!faceOn) $('#pw').focus(); });
+    }
   }
   function showProblem(status, j) {
     const list = $('#problemList');
@@ -768,6 +770,11 @@
     const look = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div><div class="nm">Aparência</div><div class="ds">Tema ' + (dark ? 'escuro' : 'claro') + ' ativo</div></div>' +
       '<div class="seg" role="group" aria-label="Tema"><button type="button" data-act="set-theme" data-id="light" aria-pressed="' + !dark + '">Claro</button><button type="button" data-act="set-theme" data-id="dark" aria-pressed="' + dark + '">Escuro</button></div></div></section>';
 
+    const faceSub = !faceSupported() ? 'Este navegador não oferece Face ID' : faceOn ? 'Ativado: entre sem digitar a senha' : 'Desativado neste aparelho';
+    const security = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div style="min-width:0"><div class="nm">Entrar com Face ID</div><div class="ds">' + esc(faceMsg || faceSub) + '</div></div>' +
+      (faceSupported() ? (faceOn ? '<button type="button" class="btn small" data-act="face-disable"' + (faceBusy ? ' disabled' : '') + '>Desativar</button>' : '<button type="button" class="btn small soft" data-act="face-enable"' + (faceBusy ? ' disabled' : '') + '>Ativar</button>') : '') + '</div>' +
+      '<p class="note" style="margin-top:6px">Vale só para este aparelho: ative no iPhone e no Mac separadamente. A senha continua funcionando.</p></section>';
+
     const cl = catsList();
     const usage = {};
     TX.forEach((t) => { if (t.kind === 'expense' && t.category) usage[t.category] = (usage[t.category] || 0) + 1; });
@@ -805,7 +812,7 @@
       '<div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn soft" data-act="refresh" id="refreshBtn">Atualizar dados</button><button type="button" class="btn" data-act="logout">Sair</button></div></section>';
 
     return '<div class="page-h"><h2>Configurações</h2><p>Tudo o que você pode ajustar no app</p></div>' +
-      '<div class="cfg">' + look +
+      '<div class="cfg">' + look + security +
       acc('cats', 'Editar categorias', cl.length + (cl.length === 1 ? ' categoria' : ' categorias') + ' · nome, cor e ordem', catBody) +
       acc('budget', 'Orçamento e conta', 'Orçamento, Cofrinho, rendimento e aporte', budBody) +
       acc('hidden', 'Transações removidas', (hid.length + hk.length + fxN) ? (hid.length + hk.length + fxN) + ' itens para restaurar' : 'Nenhuma', hidBody) +
@@ -989,6 +996,9 @@
     aporte: () => openValue('fAporte', 'Aporte mensal planejado', 'Quanto você pretende guardar por mês. No modo automático, o app usa a sobra média entre entradas e gastos.', plannedMonthly().v, '<button type="button" class="btn" data-act="aporte-auto">Automático</button>', 'Valor por mês (R$)'),
     'aporte-auto': () => { STORE.invest = Object.assign(invCfg(), { monthly: null }); closeDlg(); saveStore(); },
     'set-theme': (el) => { applyTheme(el.dataset.id); render(); },
+    'faceid-login': () => faceLogin(),
+    'face-enable': () => faceEnable(),
+    'face-disable': () => faceDisable(),
     pwtoggle: (el) => {
       const i = $('#pw'); const show = i.type === 'password';
       i.type = show ? 'text' : 'password';
@@ -1092,6 +1102,64 @@
   document.addEventListener('input', (e) => { if (e.target.id === 'a-val' || e.target.id === 'c-name') e.target.setCustomValidity('');
     if (e.target.id === 'c-color') setPickedColor(e.target.value); });
 
+  /* ---------- Face ID / Touch ID (WebAuthn) ---------- */
+  const b64u = {
+    enc: (buf) => btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+    dec: (s) => { let t = s.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; return Uint8Array.from(atob(t), (c) => c.charCodeAt(0)); }
+  };
+  const faceSupported = () => !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
+  let faceOn = false, faceMsg = '', faceBusy = false;
+  async function wa(step, extra) {
+    const r = await fetch('/api/webauthn', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ step }, extra || {})) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error || 'erro'); e.status = r.status; throw e; }
+    return j;
+  }
+  async function faceStatus() {
+    faceOn = false;
+    if (!faceSupported()) return;
+    try { const r = await fetch('/api/webauthn', { credentials: 'same-origin' }); const j = await r.json(); faceOn = !!j.enabled; } catch (e) { /* sem Face ID */ }
+  }
+  function setFaceUi() {
+    $('#faceBtn').hidden = !faceOn;
+    $('#faceOr').hidden = !faceOn;
+  }
+  async function faceLogin() {
+    const msg = $('#loginMsg'), btn = $('#faceBtn');
+    btn.disabled = true; msg.hidden = true;
+    try {
+      const o = await wa('auth-options');
+      const pk = o.publicKey;
+      const cred = await navigator.credentials.get({ publicKey: { challenge: b64u.dec(pk.challenge), rpId: pk.rpId, allowCredentials: pk.allowCredentials.map((c) => ({ type: c.type, id: b64u.dec(c.id) })), userVerification: 'required', timeout: pk.timeout } });
+      await wa('auth-verify', { token: o.token, id: cred.id, clientDataJSON: b64u.enc(cred.response.clientDataJSON), authenticatorData: b64u.enc(cred.response.authenticatorData), signature: b64u.enc(cred.response.signature) });
+      $('#pw').value = '';
+      await boot();
+    } catch (e) {
+      msg.textContent = e.name === 'NotAllowedError' || e.name === 'AbortError' ? 'Face ID cancelado. Tente de novo ou use a senha.'
+        : e.status === 429 ? 'Muitas tentativas. Use a senha ou tente mais tarde.' : 'Não foi possível entrar com Face ID. Use a senha.';
+      msg.hidden = false;
+    }
+    btn.disabled = false;
+  }
+  async function faceEnable() {
+    faceBusy = true; faceMsg = ''; render();
+    try {
+      const o = await wa('reg-options');
+      const pk = o.publicKey;
+      const cred = await navigator.credentials.create({ publicKey: { challenge: b64u.dec(pk.challenge), rp: pk.rp, user: { id: b64u.dec(pk.user.id), name: pk.user.name, displayName: pk.user.displayName }, pubKeyCredParams: pk.pubKeyCredParams, authenticatorSelection: pk.authenticatorSelection, timeout: pk.timeout, attestation: 'none' } });
+      await wa('reg-verify', { token: o.token, attestationObject: b64u.enc(cred.response.attestationObject), clientDataJSON: b64u.enc(cred.response.clientDataJSON) });
+      faceOn = true; faceMsg = 'Face ID ativado neste aparelho.';
+    } catch (e) {
+      faceMsg = e.name === 'NotAllowedError' || e.name === 'AbortError' ? 'Ativação cancelada.' : 'Não foi possível ativar o Face ID neste aparelho.';
+    }
+    faceBusy = false; render();
+  }
+  async function faceDisable() {
+    faceBusy = true; render();
+    try { await wa('remove'); faceOn = false; faceMsg = 'Face ID desativado neste aparelho.'; } catch (e) { faceMsg = 'Não foi possível desativar.'; }
+    faceBusy = false; render();
+  }
+
   /* ---------- Entrar ---------- */
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1110,6 +1178,7 @@
   /* ---------- Início do app ---------- */
   async function boot() {
     if (!(await fetchData(false))) return;
+    await faceStatus();
     await loadStore();
     buildTx();
     show('app');
