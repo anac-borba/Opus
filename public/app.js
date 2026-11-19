@@ -101,7 +101,7 @@
   /* ---------- Tema ---------- */
   function applyTheme(t) {
     document.documentElement.dataset.theme = t;
-    $('#themeColor').content = t === 'dark' ? '#0B1220' : '#F3F5F9';
+    $('#themeColor').content = t === 'dark' ? '#1B1A18' : '#F5F4EE';
     $('#themeBtn').innerHTML = t === 'dark' ? SUN : MOON;
     try { localStorage.setItem('mg-theme', t); } catch (e) { /* ignorado */ }
   }
@@ -299,6 +299,26 @@
     return Math.max(0, base - fixed().at(0));
   }
 
+  /* ---------- Mascote Bit ---------- */
+  const BIT_COL = { idle: '#FFB38A', happy: '#D9F26B', sad: '#BFD7FF', angry: '#FF5A1F', sleepy: '#9CA3AF', thinking: '#FFB38A', surprised: '#FFB38A' };
+  function bit(mood, size, float) {
+    const c = BIT_COL[mood] || BIT_COL.idle;
+    const pill = (x, y, h) => '<rect class="eye" x="' + x + '" y="' + y + '" width="7" height="' + h + '" rx="3.5" fill="' + c + '"/>';
+    const arc = (d) => '<path d="' + d + '" stroke="' + c + '" stroke-width="4.2" fill="none" stroke-linecap="round"/>';
+    const faces = {
+      idle: pill(36, 43, 16) + pill(57, 43, 16),
+      happy: arc('M32 56 Q38 45 44 56 M56 56 Q62 45 68 56') + '<path d="M42 64 Q50 72 58 64Z" fill="' + c + '"/>',
+      sad: '<path d="M32 46 L44 50 M68 46 L56 50" stroke="' + c + '" stroke-width="3.2" stroke-linecap="round"/>' + pill(36, 53, 11) + pill(57, 53, 11) + '<path d="M44 69 Q50 64 56 69" stroke="' + c + '" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M66 62 q-3 4.5 0 7 q3 -2.5 0 -7z" fill="#93C5FD"/>',
+      angry: '<path d="M31 46 L45 52 M69 46 L55 52" stroke="' + c + '" stroke-width="4.2" stroke-linecap="round"/>' + pill(36, 55, 9) + pill(57, 55, 9) + '<path d="M43 68 H57" stroke="' + c + '" stroke-width="2.6" stroke-linecap="round"/>',
+      sleepy: '<path d="M33 56 H45 M55 56 H67" stroke="' + c + '" stroke-width="3.6" stroke-linecap="round"/><path d="M62 38 h7 l-7 8 h7" stroke="' + c + '" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+      thinking: pill(38, 42, 16) + pill(59, 42, 16) + '<circle cx="46" cy="66" r="2.6" fill="' + c + '"/><circle cx="53" cy="66" r="2.6" fill="' + c + '" fill-opacity=".7"/><circle cx="60" cy="66" r="2.6" fill="' + c + '" fill-opacity=".4"/>',
+      surprised: '<circle cx="39" cy="51" r="6" fill="' + c + '"/><circle cx="61" cy="51" r="6" fill="' + c + '"/><ellipse cx="50" cy="67" rx="3.5" ry="4" fill="' + c + '"/>'
+    };
+    return '<svg class="bit' + (float ? ' float' : '') + '" width="' + size + '" height="' + size + '" viewBox="0 6 100 100" role="img" aria-label="Bit, o robô do Opus"><rect class="b" x="5" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="86" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="14" y="22" width="72" height="62" rx="22"/><rect class="s" x="22" y="31" width="56" height="42" rx="15"/>' + (faces[mood] || faces.idle) + '</svg>';
+  }
+  const CHV = '<svg class="cv" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1 1l6 6-6 6"/></svg>';
+  const greeting = () => { const h = new Date().getHours(); return (h < 5 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite') + ', Ana.'; };
+
   /* ---------- Blocos de interface ---------- */
   const barRow = (label, right, pct, color, extra, act) => {
     const inner =
@@ -342,10 +362,11 @@
     const cats = byCat(list);
     const inc = incomeIn(ym), incT = sum(inc), saldo = incT - total;
 
-    const kpis = '<div class="kpis">' +
-      kpi('Entrou em ' + esc(mName(ym)), BRL(incT), inc.length ? inc.length + (inc.length > 1 ? ' entradas' : ' entrada') + ' · ver detalhes' : 'Nenhuma entrada ainda', 'good', 'data-act="goin"') +
-      kpi('Saldo do mês', (saldo < 0 ? '−' : '') + BRL(Math.abs(saldo)), saldo >= 0 ? 'Entrou mais do que saiu' : 'Saiu mais do que entrou', saldo >= 0 ? 'good' : 'amber') +
-      kpi('Guardado', BRL(holdings()), 'Cofrinho e investimentos · ver', '', 'data-tab="invest"') + '</div>';
+    const irow = (label, sub, valueHtml, act, cls) => '<' + (act ? 'button type="button"' : 'div') + ' class="ir"' + (act ? ' ' + act : '') + '><span><span class="l">' + label + '</span>' + (sub ? '<span class="s">' + sub + '</span>' : '') + '</span><span class="v ' + (cls || '') + '">' + valueHtml + '</span>' + (act ? CHV : '') + '</' + (act ? 'button' : 'div') + '>';
+    const kpis = '<div class="inset">' +
+      irow('Entrou em ' + esc(mName(ym)), inc.length ? inc.length + (inc.length > 1 ? ' entradas' : ' entrada') + ' · ver detalhes' : 'Nenhuma entrada ainda', BRL(incT), 'data-act="goin"', 'good') +
+      irow('Saldo do mês', saldo >= 0 ? 'Entrou mais do que saiu' : 'Saiu mais do que entrou', (saldo < 0 ? '−' : '') + BRL(Math.abs(saldo)), '', saldo >= 0 ? 'good' : 'amber') +
+      irow('Guardado', 'Cofrinho e investimentos', BRL(holdings()), 'data-tab="invest"') + '</div>';
 
     const bar = cats.length
       ? '<div class="stack-bar" role="img" aria-label="' + esc('Gastos por categoria: ' + cats.map(([c, v]) => catLabel(c) + ' ' + Math.round((v / total) * 100) + '%').join(', ')) + '">' +
@@ -357,11 +378,19 @@
         '<p class="note" style="margin-top:-4px">Toque em uma categoria para ver só as compras dela.</p>'
       : '';
 
+    // Humor do Bit conforme o mês
+    let mood = 'idle', say;
+    if (total === 0 && !inc.length) { mood = 'sleepy'; say = 'Nenhum lançamento em ' + esc(mName(ym)) + ' ainda. Estou até cochilando.'; }
+    else if (pct > 100) { mood = 'sad'; say = 'Passou ' + BRL(-left) + ' do combinado. Acontece. A gente ajusta.'; }
+    else if (pct >= 90) { mood = 'surprised'; say = 'Quase no limite: faltam só ' + BRL(left) + '. Vale ir devagar.'; }
+    else if (pct <= 60) { mood = 'happy'; say = 'Está sobrando! Que tal mandar um pouco para o Cofrinho?'; }
+    else { mood = 'idle'; say = 'Tudo no lugar. Ainda dá para gastar ' + BRL(left) + '.'; }
+
+    const mascot = '<div class="mood">' + bit(mood, 120, true) + '<div class="bubble">' + say + '</div></div>';
     const hero =
-      '<section class="card hero"><div class="split"><div><h2 class="eyebrow">Gasto em ' + esc(mName(ym)) + '</h2><div class="big" style="margin-top:6px">' + money(total) + '</div></div>' +
-      '<div class="grow"><div class="between small muted"><span>Orçamento do mês · ' + BRL(B) + '</span><b style="color:var(--text)">' + pct + '%</b></div>' +
-      '<div class="bar lg" style="margin-top:8px"><i style="width:' + Math.min(100, pct) + '%;background:' + (pct > 100 ? 'var(--amber)' : 'var(--accent)') + '"></i></div>' +
-      '<div class="small ' + (left >= 0 ? 'good' : 'amber') + '" style="margin-top:8px">' + (left >= 0 ? 'Ainda dá para gastar ' + BRL(left) : 'Passou ' + BRL(-left) + ' do orçamento') + '</div></div></div>' +
+      '<section class="card hero"><div><h2 class="eyebrow">' + (left >= 0 ? 'Pode gastar' : 'Passou do orçamento') + '</h2><div class="big" style="margin-top:6px">' + money(Math.abs(left)) + '</div>' +
+      '<div class="small muted" style="margin-top:6px">Gasto em ' + esc(mName(ym)) + ': ' + BRL(total) + ' de ' + BRL(B) + ' · ' + pct + '%</div></div>' +
+      '<div class="bar lg"><i style="width:' + Math.min(100, pct) + '%;background:' + (pct > 100 ? 'var(--amber)' : 'var(--accent)') + '"></i></div>' +
       bar + legend + '</section>';
 
     const uncat = list.filter((t) => !t.category).length;
@@ -400,7 +429,7 @@
       Object.entries(grp).filter(([, v]) => v > 0 || total === 0).map(([k, v]) => barRow(k, BRL(v), total ? (v / total) * 100 : 0, gcol[k], total ? Math.round((v / total) * 100) + '% do total' : '', 'data-act="gomethod" data-id="' + gflt[k] + '"')).join('') +
       '</div><p class="note hr" style="margin-top:auto">Cartão, Pix e boleto entram sozinhos pelo banco. Dinheiro vivo você lança em <b style="color:var(--text)">+ Lançar</b>.</p></section>';
 
-    return kpis + hero + warn + '<div class="row-wrap">' + cardHtml + payHtml + '</div>';
+    return '<h2 class="greet">' + greeting() + '</h2>' + mascot + hero + kpis + warn + '<div class="row-wrap">' + cardHtml + payHtml + '</div>';
   }
 
   /* ---------- Gastos ---------- */
@@ -534,7 +563,7 @@
     const axis = cur.totals.map((_, i) => '<span>' + esc(mShort(addM(CUR, i))) + '</span>').join('');
     const stat = cur.id === 'pix' ? ['Desconto', BRL(S.P * S.dsc / 100)] : ['Juros', BRL(Math.max(0, cur.total - S.P))];
 
-    return '<section class="card"><div><h2 style="font-size:18px;font-weight:700">Simular uma compra</h2><p class="sub">Veja como a compra mexe no seu orçamento de ' + BRL(S.B) + ', mês a mês.</p></div>' +
+    return '<button type="button" class="sim-back" data-act="goto-config">‹ Configurações</button><section class="card"><div><h2 style="font-size:18px;font-weight:700">Simular uma compra</h2><p class="sub">Veja como a compra mexe no seu orçamento de ' + BRL(S.B) + ', mês a mês.</p></div>' +
       '<div class="form-grid"><div><label class="lbl" for="s-valor">Valor da compra (R$)</label><input id="s-valor" class="input" inputmode="decimal" data-sim="valor" value="' + esc(state.sim.valor) + '"></div>' +
       '<div><label class="lbl" for="s-juros">Juros do parcelado (% ao mês)</label><input id="s-juros" class="input" inputmode="decimal" data-sim="juros" value="' + esc(state.sim.juros) + '"></div>' +
       '<div><label class="lbl" for="s-desc">Desconto no Pix (%)</label><input id="s-desc" class="input" inputmode="decimal" data-sim="desc" value="' + esc(state.sim.desc) + '"></div></div>' +
@@ -811,8 +840,9 @@
       '<br>' + (storeMode === 'server' ? 'Lançamentos, categorias e metas sincronizam entre seus aparelhos.' : 'Lançamentos, categorias e metas ficam só neste aparelho.') + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn soft" data-act="refresh" id="refreshBtn">Atualizar dados</button><button type="button" class="btn" data-act="logout">Sair</button></div></section>';
 
+    const tools = '<div class="inset"><button type="button" class="ir" data-act="goto-sim"><span><span class="l">Simulador de compra</span><span class="s">Veja como uma compra mexe no orçamento, mês a mês</span></span>' + CHV + '</button></div>';
     return '<div class="page-h"><h2>Configurações</h2><p>Tudo o que você pode ajustar no app</p></div>' +
-      '<div class="cfg">' + look + security +
+      '<div class="cfg">' + tools + look + security +
       acc('cats', 'Editar categorias', cl.length + (cl.length === 1 ? ' categoria' : ' categorias') + ' · nome, cor e ordem', catBody) +
       acc('budget', 'Orçamento e conta', 'Orçamento, Cofrinho, rendimento e aporte', budBody) +
       acc('hidden', 'Transações removidas', (hid.length + hk.length + fxN) ? (hid.length + hk.length + fxN) + ' itens para restaurar' : 'Nenhuma', hidBody) +
@@ -830,16 +860,19 @@
     }
     $('#banner').innerHTML = parts.join('');
   }
+  let lastTab = null;
   function render() {
     if (!DATA) return;
-    document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === state.tab ? 'page' : 'false'));
+    const shown = state.tab === 'simular' ? 'config' : state.tab;
+    document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === shown ? 'page' : 'false'));
     $('#monthLabel').textContent = mLong(state.month);
     const mt = state.tab === 'inicio' || state.tab === 'gastos';
     document.querySelector('.month').hidden = !mt;
     $('#addBtn').hidden = !mt;
     $('#subtitle').textContent = DATA.meta.demo ? 'Dados de exemplo' : 'Itaú';
     const views = { inicio: viewInicio, gastos: viewGastos, simular: viewSimular, fixos: viewFixos, invest: viewInvest, config: viewConfig };
-    $('#view').innerHTML = views[state.tab]();
+    const vw = $('#view'); vw.innerHTML = views[state.tab]();
+    if (state.tab !== lastTab) { vw.classList.remove('go'); void vw.offsetWidth; vw.classList.add('go'); lastTab = state.tab; }
     renderBanner();
   }
 
@@ -961,6 +994,7 @@
     goin: () => { goList(() => { state.dir = 'in'; state.filter = 'all'; state.q = ''; state.fl = { methods: [], cats: [], days: [] }; }); },
     'goto-uncat': () => { goList(() => { state.dir = 'out'; state.filter = 'uncat'; state.q = ''; state.fl = { methods: [], cats: [], days: [] }; }); },
     'goto-sim': () => { state.tab = 'simular'; render(); $('#scroll').scrollTop = 0; },
+    'goto-config': () => { state.tab = 'config'; render(); $('#scroll').scrollTop = 0; },
     pay: (el) => { state.sim.pay = el.dataset.id; render(); },
     tx: (el) => openTx(el.dataset.id),
     setcat: (el) => {
