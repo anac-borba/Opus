@@ -3,8 +3,8 @@
   "short_name": "Opus",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F5F4EE",
-  "theme_color": "#B8542F",
+  "background_color": "#F5F5F7",
+  "theme_color": "#0A66D9",
   "lang": "pt-BR",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },

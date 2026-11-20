@@ -68,7 +68,7 @@
   const SUN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>';
 
   /* ---------- Estado ---------- */
-  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null, hidden: {}, hideKeys: {}, notes: {}, invest: { rate: 13, monthly: null } });
+  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null, hidden: {}, hideKeys: {}, notes: {}, invest: { rate: 13, monthly: null }, look: { accent: 'blue', face: 'big' } });
   const state = { tab: 'inicio', month: CUR, dir: 'out', filter: 'all', fl: { methods: [], cats: [], days: [] }, open: {}, q: '', showAll: false, sim: { valor: '2000', juros: '0', desc: '0', pay: 'card12' } };
   let DATA = null, STORE = defaultStore(), TX = [], FIX = null, storeMode = 'local', saveTimer = null;
 
@@ -98,14 +98,16 @@
     show('problem');
   }
 
+  const ACCENTS_OK = (a) => a === 'blue' || a === 'green' || a === 'violet';
   /* ---------- Tema ---------- */
   function applyTheme(t) {
     document.documentElement.dataset.theme = t;
-    $('#themeColor').content = t === 'dark' ? '#1B1A18' : '#F5F4EE';
     $('#themeBtn').innerHTML = t === 'dark' ? SUN : MOON;
     try { localStorage.setItem('mg-theme', t); } catch (e) { /* ignorado */ }
+    if (typeof applyLook === 'function') applyLook();
   }
   function initTheme() {
+    try { const r = JSON.parse(localStorage.getItem('mg-look') || 'null'); if (r && ACCENTS_OK(r.accent)) STORE.look = { accent: r.accent, face: r.face || 'big' }; } catch (e) { /* ignorado */ }
     let t = null;
     try { t = localStorage.getItem('mg-theme'); } catch (e) { /* ignorado */ }
     if (t !== 'dark' && t !== 'light') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -300,21 +302,67 @@
   }
 
   /* ---------- Mascote Bit ---------- */
-  const BIT_COL = { idle: '#FFB38A', happy: '#D9F26B', sad: '#BFD7FF', angry: '#FF5A1F', sleepy: '#9CA3AF', thinking: '#FFB38A', surprised: '#FFB38A' };
-  function bit(mood, size, float) {
-    const c = BIT_COL[mood] || BIT_COL.idle;
-    const pill = (x, y, h) => '<rect class="eye" x="' + x + '" y="' + y + '" width="7" height="' + h + '" rx="3.5" fill="' + c + '"/>';
-    const arc = (d) => '<path d="' + d + '" stroke="' + c + '" stroke-width="4.2" fill="none" stroke-linecap="round"/>';
-    const faces = {
-      idle: pill(36, 43, 16) + pill(57, 43, 16),
-      happy: arc('M32 56 Q38 45 44 56 M56 56 Q62 45 68 56') + '<path d="M42 64 Q50 72 58 64Z" fill="' + c + '"/>',
-      sad: '<path d="M32 46 L44 50 M68 46 L56 50" stroke="' + c + '" stroke-width="3.2" stroke-linecap="round"/>' + pill(36, 53, 11) + pill(57, 53, 11) + '<path d="M44 69 Q50 64 56 69" stroke="' + c + '" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M66 62 q-3 4.5 0 7 q3 -2.5 0 -7z" fill="#93C5FD"/>',
-      angry: '<path d="M31 46 L45 52 M69 46 L55 52" stroke="' + c + '" stroke-width="4.2" stroke-linecap="round"/>' + pill(36, 55, 9) + pill(57, 55, 9) + '<path d="M43 68 H57" stroke="' + c + '" stroke-width="2.6" stroke-linecap="round"/>',
-      sleepy: '<path d="M33 56 H45 M55 56 H67" stroke="' + c + '" stroke-width="3.6" stroke-linecap="round"/><path d="M62 38 h7 l-7 8 h7" stroke="' + c + '" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
-      thinking: pill(38, 42, 16) + pill(59, 42, 16) + '<circle cx="46" cy="66" r="2.6" fill="' + c + '"/><circle cx="53" cy="66" r="2.6" fill="' + c + '" fill-opacity=".7"/><circle cx="60" cy="66" r="2.6" fill="' + c + '" fill-opacity=".4"/>',
-      surprised: '<circle cx="39" cy="51" r="6" fill="' + c + '"/><circle cx="61" cy="51" r="6" fill="' + c + '"/><ellipse cx="50" cy="67" rx="3.5" ry="4" fill="' + c + '"/>'
-    };
-    return '<svg class="bit' + (float ? ' float' : '') + '" width="' + size + '" height="' + size + '" viewBox="0 6 100 100" role="img" aria-label="Bit, o robô do Opus"><rect class="b" x="5" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="86" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="14" y="22" width="72" height="62" rx="22"/><rect class="s" x="22" y="31" width="56" height="42" rx="15"/>' + (faces[mood] || faces.idle) + '</svg>';
+  const FACES = { big: 'Olhão', brows: 'Sobrancelhas', grin: 'Sorrisão' };
+  const ACCENTS = { blue: { n: 'Azul', c: '#0A66D9' }, green: { n: 'Verde', c: '#0F7B5F' }, violet: { n: 'Violeta', c: '#6045E0' } };
+  const lookNow = () => Object.assign({ accent: 'blue', face: 'big' }, STORE && STORE.look);
+  function bitFace(face, mood) {
+    const base = { big: '#8BE9C9', brows: '#FFD27A', grin: '#7FE3FF' }[face] || '#8BE9C9';
+    const c = { happy: '#C8F36B', sad: '#A9C8FF', angry: '#FF8A5C', sleepy: '#9CA3AF' }[mood] || base;
+    const st = (d, w) => '<path d="' + d + '" stroke="' + c + '" stroke-width="' + (w || 3) + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+    const fl = (d) => '<path d="' + d + '" fill="' + c + '"/>';
+    const zzz = st('M62 38 h7 l-7 8 h7', 2.4);
+    const tear = '<path d="M69 58 q-3 5 0 8 q3 -3 0 -8z" fill="#CFE2FF"/>';
+    const cheeks = (o) => '<ellipse cx="29" cy="63" rx="5" ry="3" fill="#FF8FA3" fill-opacity="' + o + '"/><ellipse cx="71" cy="63" rx="5" ry="3" fill="#FF8FA3" fill-opacity="' + o + '"/>';
+    const glint = (x, y, r) => '<circle cx="' + (x - 2) + '" cy="' + (y - 3) + '" r="' + r + '" fill="#fff"/>';
+    if (face === 'brows') {
+      const pill = (x, y, h) => '<rect class="eye" x="' + x + '" y="' + y + '" width="8" height="' + h + '" rx="4" fill="' + c + '"/><rect x="' + (x + 2) + '" y="' + (y + 2) + '" width="2.8" height="' + Math.min(5, h - 4) + '" rx="1.4" fill="#fff" fill-opacity=".85"/>';
+      return ({
+        idle: st('M31 44 Q37 40 43 43') + st('M57 41 Q63 37 69 41') + pill(34, 47, 16) + pill(58, 47, 16) + st('M43 67 Q50 71 57 66', 2.8),
+        happy: st('M31 41 Q37 36 43 40') + st('M57 40 Q63 36 69 41') + st('M32 56 Q38 46 44 56 M56 56 Q62 46 68 56', 4.6) + fl('M42 64 Q50 73 58 64Z'),
+        sad: st('M31 47 L43 41 M69 47 L57 41', 3.2) + pill(34, 50, 12) + pill(58, 50, 12) + st('M44 69 Q50 64 56 69', 2.8) + tear,
+        angry: st('M31 44 L43 41 M69 44 L57 41', 3.4).replace('M31 44 L43 41 M69 44 L57 41', 'M31 41 L43 46 M69 41 L57 46') + pill(34, 50, 10) + pill(58, 50, 10) + st('M43 68 H57', 2.8),
+        sleepy: st('M31 47 Q37 50 43 47 M57 47 Q63 50 69 47', 2.6) + st('M33 56 H45 M55 56 H67', 3.6) + zzz,
+        thinking: st('M31 42 Q37 36 43 41') + st('M57 44 Q63 41 69 44') + pill(36, 46, 16) + pill(60, 46, 16) + st('M44 67 Q50 70 58 65', 2.8),
+        surprised: st('M31 38 Q37 33 43 37') + st('M57 37 Q63 33 69 38') + '<circle cx="38" cy="52" r="6.5" fill="' + c + '"/><circle cx="62" cy="52" r="6.5" fill="' + c + '"/>' + glint(38, 52, 2) + glint(62, 52, 2) + '<ellipse cx="50" cy="67" rx="3.5" ry="4.5" fill="' + c + '"/>'
+      })[mood];
+    }
+    if (face === 'grin') {
+      const dot = (x, y, r) => '<circle class="eye" cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + c + '"/>' + glint(x, y, 1.6);
+      const tongue = '<path d="M44 66 Q50 71 56 66 Q50 63 44 66Z" fill="#FF8FA3"/>';
+      return ({
+        idle: dot(38, 48, 4.8) + dot(62, 48, 4.8) + fl('M37 58 Q50 76 63 58Z') + tongue,
+        happy: st('M32 50 Q38 42 44 50 M56 50 Q62 42 68 50', 4.2) + fl('M35 57 Q50 79 65 57Z') + '<path d="M43 67 Q50 73 57 67 Q50 63 43 67Z" fill="#FF8FA3"/>',
+        sad: st('M32 43 L44 47 M68 43 L56 47') + dot(38, 52, 4.8) + dot(62, 52, 4.8) + st('M41 69 Q50 60 59 69') + tear,
+        angry: st('M31 42 L45 47 M69 42 L55 47', 3.4) + dot(38, 53, 4) + dot(62, 53, 4) + st('M41 67 H59', 3),
+        sleepy: st('M32 52 H44 M56 52 H68', 3.6) + '<ellipse cx="50" cy="64" rx="3" ry="2.5" fill="' + c + '"/>' + zzz,
+        thinking: dot(40, 46, 4.8) + dot(64, 46, 4.8) + st('M43 66 Q50 64 57 68', 3) + '<circle cx="72" cy="38" r="1.8" fill="' + c + '"/>',
+        surprised: '<circle cx="38" cy="51" r="7" fill="' + c + '"/><circle cx="62" cy="51" r="7" fill="' + c + '"/>' + glint(38, 51, 2.4) + glint(62, 51, 2.4) + '<ellipse cx="50" cy="67" rx="4" ry="5" fill="' + c + '"/>'
+      })[mood];
+    }
+    const eye = (x, y, ry) => '<ellipse class="eye" cx="' + x + '" cy="' + y + '" rx="6.5" ry="' + (ry || 8) + '" fill="' + c + '"/>' + glint(x, y, 2.6) + '<circle cx="' + (x + 2) + '" cy="' + (y + 3) + '" r="1.2" fill="#fff" fill-opacity=".7"/>';
+    return ({
+      idle: eye(38, 51) + eye(62, 51) + cheeks(0.6) + st('M45 63 Q50 68 55 63', 2.6),
+      happy: st('M31 54 Q38 43 45 54 M55 54 Q62 43 69 54', 4.6) + cheeks(0.8) + fl('M43 62 Q50 72 57 62Z'),
+      sad: st('M31 44 L44 47 M69 44 L56 47') + eye(38, 54) + eye(62, 54) + st('M45 68 Q50 63 55 68', 2.6) + tear,
+      angry: st('M31 46 L45 51 M69 46 L55 51', 3.4) + eye(38, 56, 5.5) + eye(62, 56, 5.5) + st('M44 67 H56', 2.6),
+      sleepy: st('M32 54 Q38 59 44 54 M56 54 Q62 59 68 54', 3.6) + zzz,
+      thinking: eye(40, 49) + eye(64, 49) + '<circle cx="46" cy="67" r="2.4" fill="' + c + '"/><circle cx="53" cy="67" r="2.4" fill="' + c + '" fill-opacity=".7"/><circle cx="60" cy="67" r="2.4" fill="' + c + '" fill-opacity=".4"/>',
+      surprised: '<circle cx="38" cy="50" r="7.5" fill="' + c + '"/><circle cx="62" cy="50" r="7.5" fill="' + c + '"/>' + glint(38, 50, 2.6) + glint(62, 50, 2.6) + '<ellipse cx="50" cy="67" rx="3.5" ry="4.5" fill="' + c + '"/>'
+    })[mood];
+  }
+  function bit(mood, size, float, face) {
+    face = face || lookNow().face;
+    mood = mood || 'idle';
+    return '<svg class="bit' + (float ? ' float' : '') + '" width="' + size + '" height="' + size + '" viewBox="0 6 100 100" role="img" aria-label="Bit, o robô do Opus"><rect class="b" x="5" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="86" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="14" y="22" width="72" height="62" rx="22"/><rect class="s" x="22" y="31" width="56" height="42" rx="15"/>' + (bitFace(face, mood) || bitFace(face, 'idle')) + '</svg>';
+  }
+  function applyLook() {
+    const L = lookNow();
+    document.documentElement.dataset.accent = L.accent;
+    try { localStorage.setItem('mg-look', JSON.stringify(L)); } catch (e) { /* ignorado */ }
+    const m = document.getElementById('themeColor');
+    if (m) m.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#F5F5F7';
+    const bb = document.getElementById('brandBit');
+    if (bb) bb.innerHTML = bit('idle', 44, false);
   }
   const CHV = '<svg class="cv" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1 1l6 6-6 6"/></svg>';
   const greeting = () => { const h = new Date().getHours(); return (h < 5 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite') + ', Ana.'; };
@@ -796,8 +844,13 @@
     const when = meta.generatedAt ? new Date(meta.generatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
     const dark = document.documentElement.dataset.theme === 'dark';
 
-    const look = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div><div class="nm">Aparência</div><div class="ds">Tema ' + (dark ? 'escuro' : 'claro') + ' ativo</div></div>' +
-      '<div class="seg" role="group" aria-label="Tema"><button type="button" data-act="set-theme" data-id="light" aria-pressed="' + !dark + '">Claro</button><button type="button" data-act="set-theme" data-id="dark" aria-pressed="' + dark + '">Escuro</button></div></div></section>';
+    const LK = lookNow();
+    const accBtns = Object.keys(ACCENTS).map((k) => '<button type="button" class="opt' + (LK.accent === k ? ' on' : '') + '" data-act="set-accent" data-id="' + k + '" aria-pressed="' + (LK.accent === k) + '"><i class="dot" style="background:' + ACCENTS[k].c + '"></i>' + ACCENTS[k].n + '</button>').join('');
+    const faceBtns = Object.keys(FACES).map((k) => '<button type="button" class="opt face' + (LK.face === k ? ' on' : '') + '" data-act="set-face" data-id="' + k + '" aria-pressed="' + (LK.face === k) + '" aria-label="Rosto ' + FACES[k] + '">' + bit('idle', 56, false, k) + '<span>' + FACES[k] + '</span></button>').join('');
+    const look = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div><div class="nm">Tema</div><div class="ds">' + (dark ? 'Escuro' : 'Claro') + ' ativo</div></div>' +
+      '<div class="seg" role="group" aria-label="Tema"><button type="button" data-act="set-theme" data-id="light" aria-pressed="' + !dark + '">Claro</button><button type="button" data-act="set-theme" data-id="dark" aria-pressed="' + dark + '">Escuro</button></div></div>' +
+      '<div class="item"><div style="min-width:0;width:100%"><div class="nm">Cor de destaque</div><div class="opts" role="group" aria-label="Cor de destaque">' + accBtns + '</div></div></div>' +
+      '<div class="item"><div style="min-width:0;width:100%"><div class="nm">Rosto do Bit</div><div class="opts" role="group" aria-label="Rosto do Bit">' + faceBtns + '</div></div></div></section>';
 
     const faceSub = !faceSupported() ? 'Este navegador não oferece Face ID' : faceOn ? 'Ativado: entre sem digitar a senha' : 'Desativado neste aparelho';
     const security = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div style="min-width:0"><div class="nm">Entrar com Face ID</div><div class="ds">' + esc(faceMsg || faceSub) + '</div></div>' +
@@ -860,8 +913,9 @@
     }
     $('#banner').innerHTML = parts.join('');
   }
-  let lastTab = null;
+  let lastTab = null, lastLook = '';
   function render() {
+    { const lk = JSON.stringify(lookNow()); if (lk !== lastLook) { lastLook = lk; applyLook(); } }
     if (!DATA) return;
     const shown = state.tab === 'simular' ? 'config' : state.tab;
     document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === shown ? 'page' : 'false'));
@@ -1030,6 +1084,8 @@
     aporte: () => openValue('fAporte', 'Aporte mensal planejado', 'Quanto você pretende guardar por mês. No modo automático, o app usa a sobra média entre entradas e gastos.', plannedMonthly().v, '<button type="button" class="btn" data-act="aporte-auto">Automático</button>', 'Valor por mês (R$)'),
     'aporte-auto': () => { STORE.invest = Object.assign(invCfg(), { monthly: null }); closeDlg(); saveStore(); },
     'set-theme': (el) => { applyTheme(el.dataset.id); render(); },
+    'set-accent': (el) => { STORE.look = Object.assign(lookNow(), { accent: el.dataset.id }); saveStore(); },
+    'set-face': (el) => { STORE.look = Object.assign(lookNow(), { face: el.dataset.id }); saveStore(); },
     'faceid-login': () => faceLogin(),
     'face-enable': () => faceEnable(),
     'face-disable': () => faceDisable(),

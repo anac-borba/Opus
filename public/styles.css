@@ -175,13 +175,13 @@ input[type=color]{width:48px;height:36px;padding:0;border:1px solid var(--border
 
 /* Entrar */
 .auth{min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);background:var(--bg)}
-.auth-brand{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:48px clamp(32px,5vw,72px);color:#F5EFE6;background:radial-gradient(900px 520px at 90% -10%,rgba(229,138,100,.38),transparent 60%),linear-gradient(155deg,#17120F 0%,#2A1D16 55%,#5A3320 100%);overflow:hidden}
+.auth-brand{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:48px clamp(32px,5vw,72px);color:#F2F4F8;background:radial-gradient(900px 520px at 90% -10%,color-mix(in srgb,var(--accent) 38%,transparent),transparent 60%),linear-gradient(155deg,#0E1116 0%,#151B28 55%,color-mix(in srgb,var(--accent-fill) 60%,#0E1116) 100%);overflow:hidden}
 .auth-brand::after{content:"";position:absolute;right:-140px;bottom:-180px;width:420px;height:420px;border-radius:50%;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 0 60px rgba(255,255,255,.03),0 0 0 120px rgba(255,255,255,.025);pointer-events:none}
 .ab-top{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px;letter-spacing:-.01em;position:relative;z-index:1}
 .ab-logo{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
 .ab-mid{position:relative;z-index:1}
 .ab-mid h2{font-family:var(--serif);font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-.03em;font-weight:400;margin:0 0 14px}
-.ab-mid p{color:#D8C9BB;font-size:16px;line-height:1.55;max-width:430px}
+.ab-mid p{color:#C9CED8;font-size:16px;line-height:1.55;max-width:430px}
 .ab-list{list-style:none;margin:28px 0 0;padding:0;display:flex;flex-direction:column;gap:14px;font-size:14px;max-width:440px}
 .ab-list li{display:flex;gap:12px;align-items:flex-start;color:#D6E0FA;line-height:1.45}
 .ab-list svg{flex:none;margin-top:1px;color:#7FB0FF}
@@ -320,7 +320,9 @@ button.ir:active{background:var(--soft)}
 @media (max-width:640px){
   .head{gap:10px}
   .head-actions{display:contents}
-  .brand{order:1;flex:1 1 auto}
+  .brand{order:1;flex:1 1 calc(100% - 64px);min-width:0}
+  .head #themeBtn{flex:none}
+  .head .month{min-width:0}
   .head #themeBtn{order:2}
   .head .month{order:3;flex:1 1 0;justify-content:space-between}
   .head #addBtn{order:4}
@@ -328,3 +330,18 @@ button.ir:active{background:var(--soft)}
   .head .brand .subtitle,.head #subtitle{font-size:12px}
 }
 #view{display:flex;flex-direction:column;gap:16px}
+
+/* Cores de destaque personalizáveis */
+:root[data-accent="blue"]{--bg:#F5F5F7;--border:#E2E2E7;--text:#1C1C1E;--muted:#6B6B72;--track:#E3E3E8;--line:#ECECF0;--soft:#EEEEF2;--bar2:#D6D6DC;--accent:#0A66D9;--accent-fill:#0A66D9;--accent-soft:rgba(10,102,217,.12)}
+:root[data-accent="green"]{--bg:#F5F4EE;--accent:#0F7B5F;--accent-fill:#0F7B5F;--accent-soft:rgba(15,123,95,.12)}
+:root[data-accent="violet"]{--bg:#F6F5FA;--border:#E3E0EE;--text:#1D1B26;--muted:#6A6878;--track:#E5E2F0;--line:#EDEAF4;--soft:#EEECF5;--bar2:#D7D4E4;--accent:#6045E0;--accent-fill:#6045E0;--accent-soft:rgba(96,69,224,.12)}
+:root[data-theme="dark"][data-accent="blue"]{--bg:#141416;--card:#232326;--border:#343438;--text:#F2F2F5;--muted:#A5A5AD;--track:#343438;--line:#2D2D31;--soft:#2D2D31;--bar2:#48484E;--accent:#5AA2FF;--accent-soft:rgba(90,162,255,.18);--bit:#EDEEF2}
+:root[data-theme="dark"][data-accent="green"]{--bg:#151714;--accent:#43C79F;--accent-soft:rgba(67,199,159,.18)}
+:root[data-theme="dark"][data-accent="violet"]{--bg:#16151B;--card:#24222C;--border:#37343F;--text:#F1F0F6;--muted:#A8A5B5;--track:#37343F;--line:#2E2C36;--soft:#2E2C36;--bar2:#4A4757;--accent:#9C86FF;--accent-soft:rgba(156,134,255,.2);--bit:#EDEBF5}
+.opts{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+.opt{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 14px;border-radius:14px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;font-weight:500}
+.opt.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.opt .dot{width:18px;height:18px;border-radius:50%;display:inline-block}
+.opt.face{flex-direction:column;gap:2px;padding:8px 12px;min-width:88px;font-size:12.5px}
+.opt.face svg{margin:0 auto}
+#brandBit{display:none !important}
