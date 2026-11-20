@@ -68,7 +68,7 @@
   const SUN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>';
 
   /* ---------- Estado ---------- */
-  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null, hidden: {}, hideKeys: {}, notes: {}, invest: { rate: 13, monthly: null }, look: { accent: 'blue', face: 'big' } });
+  const defaultStore = () => ({ manual: [], rules: {}, goals: [], budget: null, cofrinho: null, fixedHidden: {}, catCount: 2, cats: null, hidden: {}, hideKeys: {}, notes: {}, invest: { rate: 13, monthly: null }, look: { accent: 'blue', face: 'big', body: 'classic' } });
   const state = { tab: 'inicio', month: CUR, dir: 'out', filter: 'all', fl: { methods: [], cats: [], days: [] }, open: {}, q: '', showAll: false, sim: { valor: '2000', juros: '0', desc: '0', pay: 'card12' } };
   let DATA = null, STORE = defaultStore(), TX = [], FIX = null, storeMode = 'local', saveTimer = null;
 
@@ -107,7 +107,7 @@
     if (typeof applyLook === 'function') applyLook();
   }
   function initTheme() {
-    try { const r = JSON.parse(localStorage.getItem('mg-look') || 'null'); if (r && ACCENTS_OK(r.accent)) STORE.look = { accent: r.accent, face: r.face || 'big' }; } catch (e) { /* ignorado */ }
+    try { const r = JSON.parse(localStorage.getItem('mg-look') || 'null'); if (r && ACCENTS_OK(r.accent)) STORE.look = { accent: r.accent, face: r.face || 'big', body: r.body || 'classic' }; } catch (e) { /* ignorado */ }
     let t = null;
     try { t = localStorage.getItem('mg-theme'); } catch (e) { /* ignorado */ }
     if (t !== 'dark' && t !== 'light') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -304,7 +304,7 @@
   /* ---------- Mascote Bit ---------- */
   const FACES = { big: 'Olhão', brows: 'Sobrancelhas', grin: 'Sorrisão' };
   const ACCENTS = { blue: { n: 'Azul', c: '#0A66D9' }, green: { n: 'Verde', c: '#0F7B5F' }, violet: { n: 'Violeta', c: '#6045E0' } };
-  const lookNow = () => Object.assign({ accent: 'blue', face: 'big' }, STORE && STORE.look);
+  const lookNow = () => Object.assign({ accent: 'blue', face: 'big' }, STORE && STORE.look, { body: 'critter' });
   function bitFace(face, mood) {
     const base = { big: '#8BE9C9', brows: '#FFD27A', grin: '#7FE3FF' }[face] || '#8BE9C9';
     const c = { happy: '#C8F36B', sad: '#A9C8FF', angry: '#FF8A5C', sleepy: '#9CA3AF' }[mood] || base;
@@ -350,10 +350,24 @@
       surprised: '<circle cx="38" cy="50" r="7.5" fill="' + c + '"/><circle cx="62" cy="50" r="7.5" fill="' + c + '"/>' + glint(38, 50, 2.6) + glint(62, 50, 2.6) + '<ellipse cx="50" cy="67" rx="3.5" ry="4.5" fill="' + c + '"/>'
     })[mood];
   }
-  function bit(mood, size, float, face) {
+  const BODIES = {
+    critter: { n: 'Mascote', vb: [0, 8, 100, 90], custom: true }
+  };
+  function critterEyes(mood) {
+    const e = 'fill:var(--bg)', st = 'fill:none;stroke:var(--bg);stroke-width:5;stroke-linecap:round';
+    if (mood === 'happy') return '<path class="eye" style="' + st + '" d="M35 68 Q40.500 57 46 68 M54 68 Q59.500 57 65 68"/>';
+    if (mood === 'sleepy') return '<path style="' + st + '" d="M35 66 H46 M54 66 H65"/>';
+    if (mood === 'surprised') return '<circle class="eye" style="' + e + '" cx="40.500" cy="64" r="6.500"/><circle class="eye" style="' + e + '" cx="59.500" cy="64" r="6.500"/>';
+    const h = mood === 'sad' ? 14 : 20;
+    return '<rect class="eye" style="' + e + '" x="36" y="' + (mood === 'sad' ? 62 : 56) + '" width="8" height="' + h + '" rx="4"/><rect class="eye" style="' + e + '" x="56" y="' + (mood === 'sad' ? 62 : 56) + '" width="8" height="' + h + '" rx="4"/>';
+  }
+  function bit(mood, size, float, face, body) {
     face = face || lookNow().face;
+    body = BODIES.critter;
     mood = mood || 'idle';
-    return '<svg class="bit' + (float ? ' float' : '') + '" width="' + size + '" height="' + size + '" viewBox="0 6 100 100" role="img" aria-label="Bit, o robô do Opus"><rect class="b" x="5" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="86" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="14" y="22" width="72" height="62" rx="22"/><rect class="s" x="22" y="31" width="56" height="42" rx="15"/>' + (bitFace(face, mood) || bitFace(face, 'idle')) + '</svg>';
+    const v = body.vb, w = Math.round(size * v[2] / v[3]);
+    if (body.custom) return '<svg class="bit' + (float ? ' float' : '') + '" width="' + w + '" height="' + size + '" viewBox="' + v.join(' ') + '" role="img" aria-label="Mascote do Opus"><path class="b" d="M26 44 C22 30 24 16 30 15 C37 14 46 24 48 34 Z"/><path class="b" d="M74 44 C78 30 76 16 70 15 C63 14 54 24 52 34 Z"/><ellipse class="b" cx="50" cy="64" rx="42" ry="33"/>' + critterEyes(mood) + '</svg>';
+    return '<svg class="bit' + (float ? ' float' : '') + '" width="' + w + '" height="' + size + '" viewBox="' + v.join(' ') + '" role="img" aria-label="Bit, o robô do Opus">' + body.u + '<rect class="b" x="5" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="86" y="46" width="9" height="20" rx="4.5"/><rect class="b" x="14" y="22" width="72" height="62" rx="22"/><rect class="s" x="22" y="31" width="56" height="42" rx="15"/>' + (bitFace(face, mood) || bitFace(face, 'idle')) + '</svg>';
   }
   function applyLook() {
     const L = lookNow();
@@ -846,11 +860,12 @@
 
     const LK = lookNow();
     const accBtns = Object.keys(ACCENTS).map((k) => '<button type="button" class="opt' + (LK.accent === k ? ' on' : '') + '" data-act="set-accent" data-id="' + k + '" aria-pressed="' + (LK.accent === k) + '"><i class="dot" style="background:' + ACCENTS[k].c + '"></i>' + ACCENTS[k].n + '</button>').join('');
-    const faceBtns = Object.keys(FACES).map((k) => '<button type="button" class="opt face' + (LK.face === k ? ' on' : '') + '" data-act="set-face" data-id="' + k + '" aria-pressed="' + (LK.face === k) + '" aria-label="Rosto ' + FACES[k] + '">' + bit('idle', 56, false, k) + '<span>' + FACES[k] + '</span></button>').join('');
-    const look = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div><div class="nm">Tema</div><div class="ds">' + (dark ? 'Escuro' : 'Claro') + ' ativo</div></div>' +
+    const summary = ACCENTS[LK.accent].n;
+    const look = '<section class="card" style="gap:0"><button type="button" class="look-head" data-act="toggle-look" aria-expanded="' + lookOpen + '"><span><span class="l">Aparência</span><span class="s">' + summary + '</span></span><span class="cvwrap' + (lookOpen ? ' open' : '') + '">' + CHV + '</span></button>' +
+      (lookOpen ? '<div class="look-body"><div class="item"><div><div class="nm">Tema</div><div class="ds">' + (dark ? 'Escuro' : 'Claro') + ' ativo</div></div>' +
       '<div class="seg" role="group" aria-label="Tema"><button type="button" data-act="set-theme" data-id="light" aria-pressed="' + !dark + '">Claro</button><button type="button" data-act="set-theme" data-id="dark" aria-pressed="' + dark + '">Escuro</button></div></div>' +
       '<div class="item"><div style="min-width:0;width:100%"><div class="nm">Cor de destaque</div><div class="opts" role="group" aria-label="Cor de destaque">' + accBtns + '</div></div></div>' +
-      '<div class="item"><div style="min-width:0;width:100%"><div class="nm">Rosto do Bit</div><div class="opts" role="group" aria-label="Rosto do Bit">' + faceBtns + '</div></div></div></section>';
+      '</div>' : '') + '</section>';
 
     const faceSub = !faceSupported() ? 'Este navegador não oferece Face ID' : faceOn ? 'Ativado: entre sem digitar a senha' : 'Desativado neste aparelho';
     const security = '<section class="card" style="gap:0"><div class="item" style="border-top:0;padding-top:0"><div style="min-width:0"><div class="nm">Entrar com Face ID</div><div class="ds">' + esc(faceMsg || faceSub) + '</div></div>' +
@@ -913,7 +928,7 @@
     }
     $('#banner').innerHTML = parts.join('');
   }
-  let lastTab = null, lastLook = '';
+  let lastTab = null, lastLook = '', lookOpen = false;
   function render() {
     { const lk = JSON.stringify(lookNow()); if (lk !== lastLook) { lastLook = lk; applyLook(); } }
     if (!DATA) return;
@@ -1085,6 +1100,8 @@
     'aporte-auto': () => { STORE.invest = Object.assign(invCfg(), { monthly: null }); closeDlg(); saveStore(); },
     'set-theme': (el) => { applyTheme(el.dataset.id); render(); },
     'set-accent': (el) => { STORE.look = Object.assign(lookNow(), { accent: el.dataset.id }); saveStore(); },
+    'toggle-look': () => { lookOpen = !lookOpen; render(); },
+    'set-body': (el) => { STORE.look = Object.assign(lookNow(), { body: el.dataset.id }); saveStore(); },
     'set-face': (el) => { STORE.look = Object.assign(lookNow(), { face: el.dataset.id }); saveStore(); },
     'faceid-login': () => faceLogin(),
     'face-enable': () => faceEnable(),
